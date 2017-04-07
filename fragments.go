@@ -9,7 +9,7 @@ import (
 
 type FragmentsT struct {
 	Options map[string][]string
-	Volumes map[string]map[string]string
+	Volume  map[string]map[string]string
 }
 
 func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
@@ -41,15 +41,15 @@ func GetFragments(c *ConfigT, u *user.User) (*FragmentsT, error) {
 		}
 	}
 
-	f.Volumes = make(map[string]map[string]string)
-	for volKey, volVal := range c.Volumes {
-		f.Volumes[volKey] = make(map[string]string)
+	f.Volume = make(map[string]map[string]string)
+	for volKey, volVal := range c.Volume {
+		f.Volume[volKey] = make(map[string]string)
 		for attrKey, attrVal := range volVal {
 			s, err := parseAndExecute(fmt.Sprintf("volume %s %s", volKey, attrKey), attrVal, u)
 			if err != nil {
 				return nil, err
 			}
-			f.Volumes[volKey][attrKey] = s
+			f.Volume[volKey][attrKey] = s
 		}
 	}
 

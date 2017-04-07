@@ -10,7 +10,7 @@ type ConfigT struct {
 	Rkt                   string
 	DefaultInteractiveCmd string `toml:"default-interactive-cmd"`
 	Options               map[string][]string
-	Volumes               map[string]map[string]string
+	Volume                map[string]map[string]string
 }
 
 // valid options
@@ -27,7 +27,6 @@ const VolumeTarget = "target"
 // by other than root.
 var configFiles []string = []string{
 	"/etc/rktrunner.toml",
-	"/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner.toml",
 }
 
 func GetConfig() (*ConfigT, error) {
@@ -75,7 +74,7 @@ configFileAttempts:
 		VolumeTarget: true,
 	}
 
-	for volKey, volVal := range c.Volumes {
+	for volKey, volVal := range c.Volume {
 		for attrKey := range volVal {
 			if !validVolAttrs[attrKey] {
 				return nil, fmt.Errorf("unknown attr %s for volume %s", attrKey, volKey)

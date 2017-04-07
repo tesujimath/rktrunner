@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
+	"syscall"
 )
 
 type optionsT struct {
 	interactive bool
+	verbose     bool
 }
 
 type runT struct {
@@ -26,7 +29,8 @@ func die(format string, args ...interface{}) {
 }
 
 func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
-	flag.BoolVar(&r.options.interactive, "interactive", false, "run image interactively, using bash")
+	flag.BoolVar(&r.options.interactive, "interactive", false, "run image interactively")
+	flag.BoolVar(&r.options.verbose, "verbose", false, "show full rkt run command")
 	flag.Parse()
 	args := flag.Args()
 
@@ -56,14 +60,12 @@ func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
 		r.cmd = c.DefaultInteractiveCmd
 	}
 
-	fmt.Printf("parseArgs: %+v\n", r)
-
 	return
 }
 
 func formatVolumes(f *rktrunner.FragmentsT) []string {
 	var s []string
-	for key, vol := range f.Volumes {
+	for key, vol := range f.Volume {
 		s = append(s, "--volume", fmt.Sprintf("%s,kind=host,source=%s", key, vol[rktrunner.VolumeHost]))
 	}
 	return s
@@ -71,7 +73,7 @@ func formatVolumes(f *rktrunner.FragmentsT) []string {
 
 func formatMounts(f *rktrunner.FragmentsT) []string {
 	var s []string
-	for key, vol := range f.Volumes {
+	for key, vol := range f.Volume {
 		s = append(s, "--mount", fmt.Sprintf("volume=%s,target=%s", key, vol[rktrunner.VolumeTarget]))
 	}
 	return s
@@ -105,8 +107,10 @@ func execute(c *rktrunner.ConfigT, u *user.User, f *rktrunner.FragmentsT, r *run
 			args = append(args, r.cmdArgs...)
 		}
 	}
-	fmt.Printf("exec %s %v\n", c.Rkt, args)
-	return nil
+	if r.options.verbose {
+		fmt.Printf("%s %s\n", c.Rkt, strings.Join(args[1:], " "))
+	}
+	return syscall.Exec(c.Rkt, args, os.Environ())
 }
 
 func main() {
@@ -129,7 +133,6 @@ func main() {
 	if err != nil {
 		die("failed to get fragments: %v", err)
 	}
-	fmt.Printf("fragments: %+v\n", f)
 
 	err = execute(c, u, f, &r)
 	if err != nil {

@@ -8,7 +8,7 @@ image = ["--user={{.Uid}}", "--group={{.Gid}}"]
 
 [volume.home]
 host = "{{.HomeDir}}"
-target = "/targethome/{{.Username}}"
+target = "/home/{{.Username}}"
 
 [volume.data]
 host = "/data"
