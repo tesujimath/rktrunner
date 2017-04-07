@@ -1,0 +1,15 @@
+rkt = "/usr/bin/rkt"
+default-interactive-cmd = "bash"
+
+[options]
+general = ["--insecure-options=image"]
+run = ["--set-env=HOME=/home/{{.Username}}"]
+image = ["--user={{.Uid}}", "--group={{.Gid}}"]
+
+[volume.home]
+host = "{{.HomeDir}}"
+target = "/targethome/{{.Username}}"
+
+[volume.data]
+host = "/data"
+target = "/hostdata"
