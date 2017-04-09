@@ -1,8 +1,8 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"github.com/droundy/goopt"
 	"github.com/tesujimath/rktrunner"
 	"os"
 	"os/user"
@@ -12,8 +12,8 @@ import (
 )
 
 type optionsT struct {
-	interactive bool
-	verbose     bool
+	interactive *bool
+	verbose     *bool
 }
 
 type runT struct {
@@ -29,10 +29,21 @@ func die(format string, args ...interface{}) {
 }
 
 func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
-	flag.BoolVar(&r.options.interactive, "interactive", false, "run image interactively")
-	flag.BoolVar(&r.options.verbose, "verbose", false, "show full rkt run command")
-	flag.Parse()
-	args := flag.Args()
+	r.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
+	r.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
+	goopt.RequireOrder = true
+	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
+	goopt.Description = func() string {
+		return `Run rkt containers with user mapping, and volume mounting
+as defined by the system administrator.
+
+$ rkt-run <options> <container> [<container-command> [<container-command-args>]]
+`
+	}
+	goopt.Summary = "Enable unprivileged users to run containers using rkt"
+	goopt.Suite = "rktrunner"
+	goopt.Parse(nil)
+	args := goopt.Args
 
 	// container
 	if len(args) == 0 || args[0] == "" {
@@ -41,7 +52,7 @@ func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
 	if args[0][0] == '-' {
 		err = fmt.Errorf("container cannot start with -")
 	}
-	r.container = flag.Args()[0]
+	r.container = args[0]
 
 	// commands, check for ---
 	for _, arg := range args[1:] {
@@ -56,7 +67,7 @@ func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
 		if len(args) > 2 {
 			r.cmdArgs = args[2:]
 		}
-	} else if r.options.interactive && c.DefaultInteractiveCmd != "" {
+	} else if *r.options.interactive && c.DefaultInteractiveCmd != "" {
 		r.cmd = c.DefaultInteractiveCmd
 	}
 
@@ -85,7 +96,7 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 	args[0] = filepath.Base(c.Rkt)
 	args = append(args, f.Options[rktrunner.GeneralOptions]...)
 	args = append(args, "run")
-	if r.options.interactive {
+	if *r.options.interactive {
 		args = append(args, "--interactive")
 	}
 	args = append(args, f.Options[rktrunner.RunOptions]...)
@@ -100,7 +111,7 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 			args = append(args, r.cmdArgs...)
 		}
 	}
-	if r.options.verbose {
+	if *r.options.verbose {
 		fmt.Printf("%s %s\n", c.Rkt, strings.Join(args[1:], " "))
 	}
 
@@ -127,7 +138,6 @@ func main() {
 	if err != nil {
 		die("failed to get fragments: %v", err)
 	}
-	fmt.Printf("fragments: %#v\n", f)
 
 	// set real uid same as effective
 	err = syscall.Setreuid(syscall.Geteuid(), syscall.Geteuid())
