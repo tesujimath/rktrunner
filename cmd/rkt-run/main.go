@@ -110,6 +110,7 @@ func execute(c *rktrunner.ConfigT, u *user.User, f *rktrunner.FragmentsT, r *run
 	if r.options.verbose {
 		fmt.Printf("%s %s\n", c.Rkt, strings.Join(args[1:], " "))
 	}
+
 	return syscall.Exec(c.Rkt, args, os.Environ())
 }
 
@@ -132,6 +133,12 @@ func main() {
 	f, err := rktrunner.GetFragments(c, u)
 	if err != nil {
 		die("failed to get fragments: %v", err)
+	}
+
+	// set real uid same as effective
+	err = syscall.Setreuid(syscall.Geteuid(), syscall.Geteuid())
+	if err != nil {
+		die("failed to set real uid: %v", err)
 	}
 
 	err = execute(c, u, f, &r)
