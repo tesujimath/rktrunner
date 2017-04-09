@@ -79,14 +79,7 @@ func formatMounts(f *rktrunner.FragmentsT) []string {
 	return s
 }
 
-func formatUserMapping(u *user.User) []string {
-	var s []string
-	s = append(s, fmt.Sprintf("--user=%s", u.Uid))
-	s = append(s, fmt.Sprintf("--user=%s", u.Uid))
-	return s
-}
-
-func execute(c *rktrunner.ConfigT, u *user.User, f *rktrunner.FragmentsT, r *runT) error {
+func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 	//rkt --insecure-options=image run --set-env=HOME=/home/guestsi --volume home,kind=host,source=/home/guestsi --volume data,kind=host,source=/data docker://quay.io/biocontainers/blast:2.6.0--boost1.61_0 --mount volume=home,target=/home/guestsi --mount volume=data,target=/hostdata --user=511 --group=511 --exec ~/scripts/myblast -- /hostdata/myfile
 	args := make([]string, 1)
 	args[0] = filepath.Base(c.Rkt)
@@ -99,7 +92,7 @@ func execute(c *rktrunner.ConfigT, u *user.User, f *rktrunner.FragmentsT, r *run
 	args = append(args, formatVolumes(f)...)
 	args = append(args, r.container)
 	args = append(args, formatMounts(f)...)
-	args = append(args, formatUserMapping(u)...)
+	args = append(args, f.Options[rktrunner.ImageOptions]...)
 	if r.cmd != "" {
 		args = append(args, "--exec", r.cmd)
 		if len(r.cmdArgs) > 0 {
@@ -134,6 +127,7 @@ func main() {
 	if err != nil {
 		die("failed to get fragments: %v", err)
 	}
+	fmt.Printf("fragments: %#v\n", f)
 
 	// set real uid same as effective
 	err = syscall.Setreuid(syscall.Geteuid(), syscall.Geteuid())
@@ -141,7 +135,7 @@ func main() {
 		die("failed to set real uid: %v", err)
 	}
 
-	err = execute(c, u, f, &r)
+	err = execute(c, f, &r)
 	if err != nil {
 		die("failed: %v", err)
 	}
