@@ -12,16 +12,17 @@ import (
 )
 
 type optionsT struct {
-	exec        *string
-	interactive *bool
-	verbose     *bool
+	exec          *string
+	interactive   *bool
+	verbose       *bool
+	noImagePrefix *bool
 }
 
 type runT struct {
-	options   optionsT
-	container string
-	cmd       string
-	cmdArgs   []string
+	options optionsT
+	image   string
+	cmd     string
+	cmdArgs []string
 }
 
 func die(format string, args ...interface{}) {
@@ -30,16 +31,17 @@ func die(format string, args ...interface{}) {
 }
 
 func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
-	r.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of container default")
+	r.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
 	r.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
 	r.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
+	r.options.noImagePrefix = goopt.Flag([]string{"--no-image-prefix"}, []string{}, "omit default image prefix", "")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
 	goopt.Description = func() string {
 		return `Run rkt containers with user mapping, and volume mounting
 as defined by the system administrator.
 
-$ rkt-run <options> <container> [<container-command> [<container-command-args>]]
+$ rkt-run <options> <image> [<command> [<command-args>]]
 `
 	}
 	goopt.Summary = "Enable unprivileged users to run containers using rkt"
@@ -47,16 +49,20 @@ $ rkt-run <options> <container> [<container-command> [<container-command-args>]]
 	goopt.Parse(nil)
 	args := goopt.Args
 
-	// container
+	// image
 	if len(args) == 0 || args[0] == "" {
-		err = fmt.Errorf("missing container")
+		err = fmt.Errorf("missing image")
 		return
 	}
 	if args[0][0] == '-' {
-		err = fmt.Errorf("container cannot start with -")
+		err = fmt.Errorf("image cannot start with -")
 		return
 	}
-	r.container = args[0]
+	var imagePrefix string
+	if !*r.options.noImagePrefix && c.ImagePrefix != "" {
+		imagePrefix = c.ImagePrefix
+	}
+	r.image = fmt.Sprintf("%s%s", imagePrefix, args[0])
 
 	// command
 	if *r.options.exec != "" {
@@ -114,7 +120,7 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 	}
 	args = append(args, f.Options[rktrunner.RunOptions]...)
 	args = append(args, formatVolumes(f)...)
-	args = append(args, r.container)
+	args = append(args, r.image)
 	args = append(args, formatMounts(f)...)
 	args = append(args, f.Options[rktrunner.ImageOptions]...)
 	if r.cmd != "" {
