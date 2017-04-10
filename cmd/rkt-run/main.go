@@ -12,6 +12,7 @@ import (
 )
 
 type optionsT struct {
+	exec        *string
 	interactive *bool
 	verbose     *bool
 }
@@ -29,6 +30,7 @@ func die(format string, args ...interface{}) {
 }
 
 func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
+	r.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of container default")
 	r.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
 	r.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
 	goopt.RequireOrder = true
@@ -48,13 +50,26 @@ $ rkt-run <options> <container> [<container-command> [<container-command-args>]]
 	// container
 	if len(args) == 0 || args[0] == "" {
 		err = fmt.Errorf("missing container")
+		return
 	}
 	if args[0][0] == '-' {
 		err = fmt.Errorf("container cannot start with -")
+		return
 	}
 	r.container = args[0]
 
-	// commands, check for ---
+	// command
+	if *r.options.exec != "" {
+		if (*r.options.exec)[0] == '-' {
+			err = fmt.Errorf("command cannot start with -")
+			return
+		}
+		r.cmd = *r.options.exec
+	} else if *r.options.interactive && c.DefaultInteractiveCmd != "" {
+		r.cmd = c.DefaultInteractiveCmd
+	}
+
+	// args, check for ---
 	for _, arg := range args[1:] {
 		if arg == "---" {
 			err = fmt.Errorf("%s invalid", arg)
@@ -62,13 +77,7 @@ $ rkt-run <options> <container> [<container-command> [<container-command-args>]]
 		}
 	}
 	if len(args) > 1 {
-		r.cmd = args[1]
-
-		if len(args) > 2 {
-			r.cmdArgs = args[2:]
-		}
-	} else if *r.options.interactive && c.DefaultInteractiveCmd != "" {
-		r.cmd = c.DefaultInteractiveCmd
+		r.cmdArgs = args[1:]
 	}
 
 	return
@@ -106,10 +115,10 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 	args = append(args, f.Options[rktrunner.ImageOptions]...)
 	if r.cmd != "" {
 		args = append(args, "--exec", r.cmd)
-		if len(r.cmdArgs) > 0 {
-			args = append(args, "--")
-			args = append(args, r.cmdArgs...)
-		}
+	}
+	if len(r.cmdArgs) > 0 {
+		args = append(args, "--")
+		args = append(args, r.cmdArgs...)
 	}
 	if *r.options.verbose {
 		fmt.Printf("%s %s\n", c.Rkt, strings.Join(args[1:], " "))
