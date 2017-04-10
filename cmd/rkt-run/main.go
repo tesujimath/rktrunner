@@ -86,7 +86,9 @@ $ rkt-run <options> <container> [<container-command> [<container-command-args>]]
 func formatVolumes(f *rktrunner.FragmentsT) []string {
 	var s []string
 	for key, vol := range f.Volume {
-		s = append(s, "--volume", fmt.Sprintf("%s,kind=host,source=%s", key, vol[rktrunner.VolumeHost]))
+		if vol.Volume != "" {
+			s = append(s, "--volume", fmt.Sprintf("%s,%s", key, vol.Volume))
+		}
 	}
 	return s
 }
@@ -94,7 +96,9 @@ func formatVolumes(f *rktrunner.FragmentsT) []string {
 func formatMounts(f *rktrunner.FragmentsT) []string {
 	var s []string
 	for key, vol := range f.Volume {
-		s = append(s, "--mount", fmt.Sprintf("volume=%s,target=%s", key, vol[rktrunner.VolumeTarget]))
+		if vol.Mount != "" {
+			s = append(s, "--mount", fmt.Sprintf("volume=%s,%s", key, vol.Mount))
+		}
 	}
 	return s
 }
@@ -130,7 +134,7 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 func main() {
 	c, err := rktrunner.GetConfig()
 	if err != nil {
-		die("failed on config: %v", err)
+		die("configuration error: %v", err)
 	}
 
 	r, err := parseArgs(c)
@@ -145,7 +149,7 @@ func main() {
 
 	f, err := rktrunner.GetFragments(c, u)
 	if err != nil {
-		die("failed to get fragments: %v", err)
+		die("configuration error: %v", err)
 	}
 
 	// set real uid same as effective

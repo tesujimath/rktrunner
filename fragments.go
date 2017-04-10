@@ -9,19 +9,19 @@ import (
 
 type FragmentsT struct {
 	Options map[string][]string
-	Volume  map[string]map[string]string
+	Volume  map[string]VolumeT
 }
 
 func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
 	var result string
 	t, err := template.New(desc).Parse(tstr)
 	if err != nil {
-		return result, fmt.Errorf("failed to parse template for %s: %v", desc, err)
+		return result, err
 	}
 	var b bytes.Buffer
 	err = t.Execute(&b, u)
 	if err != nil {
-		return result, fmt.Errorf("failed to execute template for %s: %v", desc, err)
+		return result, err
 	}
 	result = b.String()
 	return result, nil
@@ -41,16 +41,23 @@ func GetFragments(c *ConfigT, u *user.User) (*FragmentsT, error) {
 		}
 	}
 
-	f.Volume = make(map[string]map[string]string)
+	f.Volume = make(map[string]VolumeT)
 	for volKey, volVal := range c.Volume {
-		f.Volume[volKey] = make(map[string]string)
-		for attrKey, attrVal := range volVal {
-			s, err := parseAndExecute(fmt.Sprintf("volume %s %s", volKey, attrKey), attrVal, u)
+		var err error
+		var volFrag VolumeT
+		if volVal.Volume != "" {
+			volFrag.Volume, err = parseAndExecute(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, u)
 			if err != nil {
 				return nil, err
 			}
-			f.Volume[volKey][attrKey] = s
 		}
+		if volVal.Mount != "" {
+			volFrag.Mount, err = parseAndExecute(fmt.Sprintf("volume %s mount", volKey), volVal.Mount, u)
+			if err != nil {
+				return nil, err
+			}
+		}
+		f.Volume[volKey] = volFrag
 	}
 
 	return &f, nil

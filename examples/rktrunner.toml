@@ -7,9 +7,19 @@ run = ["--set-env=HOME=/home/{{.Username}}"]
 image = ["--user={{.Uid}}", "--group={{.Gid}}"]
 
 [volume.home]
-host = "{{.HomeDir}}"
-target = "/home/{{.Username}}"
+volume = "kind=host,source={{.HomeDir}}"
+mount = "target=/home/{{.Username}}"
 
-[volume.data]
-host = "/data"
-target = "/hostdata"
+[volume.dataset]
+volume = "kind=host,source=/dataset"
+mount = "target=/dataset"
+
+[volume.bifo]
+volume = "kind=host,source=/bifo"
+mount = "target=/bifo"
+
+[volume.volume-config]
+volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
+
+[volume.volume-data]
+volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"

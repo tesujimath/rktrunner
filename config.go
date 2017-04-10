@@ -10,7 +10,12 @@ type ConfigT struct {
 	Rkt                   string
 	DefaultInteractiveCmd string `toml:"default-interactive-cmd"`
 	Options               map[string][]string
-	Volume                map[string]map[string]string
+	Volume                map[string]VolumeT
+}
+
+type VolumeT struct {
+	Volume string
+	Mount  string
 }
 
 // valid options
@@ -18,14 +23,12 @@ const GeneralOptions = "general"
 const RunOptions = "run"
 const ImageOptions = "image"
 
-// volumes
-const VolumeHost = "host"
-const VolumeTarget = "target"
-
 // The first config file found is the one used.
 // There is a serious security hole if any of these files are writable
 // by other than root.
 var configFiles []string = []string{
+	// during development:
+	//"/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner.toml",
 	"/etc/rktrunner.toml",
 }
 
@@ -64,26 +67,6 @@ configFileAttempts:
 	for optKey := range c.Options {
 		if !validOptions[optKey] {
 			return nil, fmt.Errorf("unknown option: %s", optKey)
-		}
-	}
-
-	// validate volumes
-	type validVolAttrsT map[string]bool
-	validVolAttrs := validVolAttrsT{
-		VolumeHost:   true,
-		VolumeTarget: true,
-	}
-
-	for volKey, volVal := range c.Volume {
-		for attrKey := range volVal {
-			if !validVolAttrs[attrKey] {
-				return nil, fmt.Errorf("unknown attr %s for volume %s", attrKey, volKey)
-			}
-		}
-		for attrKey, _ := range validVolAttrs {
-			if volVal[attrKey] == "" {
-				return nil, fmt.Errorf("missing attr %s for volume %s", attrKey, volKey)
-			}
 		}
 	}
 
