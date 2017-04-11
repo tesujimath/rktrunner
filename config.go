@@ -10,6 +10,7 @@ type ConfigT struct {
 	Rkt                   string
 	ImagePrefix           string `toml:"image-prefix"`
 	DefaultInteractiveCmd string `toml:"default-interactive-cmd"`
+	Environment           map[string]string
 	Options               map[string][]string
 	Volume                map[string]VolumeT
 }

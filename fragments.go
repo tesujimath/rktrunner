@@ -8,8 +8,9 @@ import (
 )
 
 type FragmentsT struct {
-	Options map[string][]string
-	Volume  map[string]VolumeT
+	Environment map[string]string
+	Options     map[string][]string
+	Volume      map[string]VolumeT
 }
 
 func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
@@ -29,6 +30,15 @@ func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
 
 func GetFragments(c *ConfigT, u *user.User) (*FragmentsT, error) {
 	var f FragmentsT
+	var err error
+
+	f.Environment = make(map[string]string)
+	for envKey, envVal := range c.Environment {
+		f.Environment[envKey], err = parseAndExecute(fmt.Sprintf("environment %v", envKey), envVal, u)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	f.Options = make(map[string][]string)
 	for optKey, optVals := range c.Options {
@@ -43,7 +53,6 @@ func GetFragments(c *ConfigT, u *user.User) (*FragmentsT, error) {
 
 	f.Volume = make(map[string]VolumeT)
 	for volKey, volVal := range c.Volume {
-		var err error
 		var volFrag VolumeT
 		if volVal.Volume != "" {
 			volFrag.Volume, err = parseAndExecute(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, u)

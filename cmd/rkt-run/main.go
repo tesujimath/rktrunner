@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 )
@@ -109,6 +110,39 @@ func formatMounts(f *rktrunner.FragmentsT) []string {
 	return s
 }
 
+func printEnviron(environ map[string]string) {
+	// get keys in order
+	var keys []string
+	for key := range environ {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Printf("%s=%s ", key, environ[key])
+	}
+}
+
+// augmentEnviron overrides and/or augments the base environment with the extra
+func augmentEnviron(base []string, extra map[string]string) []string {
+	environ := make(map[string]string)
+	for _, keyval := range base {
+		i := strings.IndexRune(keyval, '=')
+		if i != -1 {
+			key := keyval[:i]
+			val := keyval[i+1:]
+			environ[key] = val
+		}
+	}
+	for key, val := range extra {
+		environ[key] = val
+	}
+	var result []string
+	for key, val := range environ {
+		result = append(result, fmt.Sprintf("%s=%s", key, val))
+	}
+	return result
+}
+
 func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 	//rkt --insecure-options=image run --set-env=HOME=/home/guestsi --volume home,kind=host,source=/home/guestsi --volume data,kind=host,source=/data docker://quay.io/biocontainers/blast:2.6.0--boost1.61_0 --mount volume=home,target=/home/guestsi --mount volume=data,target=/hostdata --user=511 --group=511 --exec ~/scripts/myblast -- /hostdata/myfile
 	args := make([]string, 1)
@@ -131,10 +165,12 @@ func execute(c *rktrunner.ConfigT, f *rktrunner.FragmentsT, r *runT) error {
 		args = append(args, r.cmdArgs...)
 	}
 	if *r.options.verbose {
+		printEnviron(f.Environment)
 		fmt.Printf("%s %s\n", c.Rkt, strings.Join(args[1:], " "))
 	}
 
-	return syscall.Exec(c.Rkt, args, os.Environ())
+	environ := augmentEnviron(os.Environ(), f.Environment)
+	return syscall.Exec(c.Rkt, args, environ)
 }
 
 func main() {

@@ -1,11 +1,18 @@
 rkt = "/usr/bin/rkt"
 image-prefix = "docker://"
-default-interactive-cmd = "bash"
+default-interactive-cmd = "sh"
+
+[environment]
+# needed for per-application options --stdout, etc
+# as per https://github.com/rkt/rkt/issues/3639
+RKT_EXPERIMENT_ATTACH = "true"
 
 [options]
 general = ["--insecure-options=image"]
 run = ["--set-env=HOME=/home/{{.Username}}"]
-image = ["--user={{.Uid}}", "--group={{.Gid}}"]
+# --stdout=stream ought to work, but doesn't
+# see https://github.com/rkt/rkt/issues/3639
+image = ["--user={{.Uid}}", "--group={{.Gid}}", "--stdout=log"]
 
 [volume.home]
 volume = "kind=host,source={{.HomeDir}}"
