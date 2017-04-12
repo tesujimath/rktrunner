@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-type ConfigT struct {
+type configT struct {
 	Rkt                   string
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
@@ -34,13 +34,12 @@ var configFiles []string = []string{
 	"/etc/rktrunner.toml",
 }
 
-func GetConfig() (*ConfigT, error) {
-	var c ConfigT
+func GetConfig(c *configT) error {
 	var err error
 	var path string
 configFileAttempts:
 	for _, path = range configFiles {
-		_, err = toml.DecodeFile(path, &c)
+		_, err = toml.DecodeFile(path, c)
 		if err != nil && os.IsNotExist(err) {
 			continue configFileAttempts
 		}
@@ -51,12 +50,12 @@ configFileAttempts:
 			// provide some context
 			err = fmt.Errorf("%s %v", path, err)
 		}
-		return nil, err
+		return err
 	}
 
 	// validate options
 	if c.Rkt == "" {
-		return nil, fmt.Errorf("missing rkt")
+		return fmt.Errorf("missing rkt")
 	}
 
 	type validOptionsT map[string]bool
@@ -68,9 +67,9 @@ configFileAttempts:
 
 	for optKey := range c.Options {
 		if !validOptions[optKey] {
-			return nil, fmt.Errorf("unknown option: %s", optKey)
+			return fmt.Errorf("unknown option: %s", optKey)
 		}
 	}
 
-	return &c, nil
+	return nil
 }
