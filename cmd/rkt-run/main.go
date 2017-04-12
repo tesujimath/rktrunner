@@ -51,7 +51,7 @@ func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
 		return `Run rkt containers with user mapping, and volume mounting
 as defined by the system administrator.
 
-$ rkt-run <options> <image> [<command> [<command-args>]]
+$ rkt-run <options> <image> [<args>]
 `
 	}
 	goopt.Summary = "Enable unprivileged users to run containers using rkt"
