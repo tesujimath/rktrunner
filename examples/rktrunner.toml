@@ -1,5 +1,4 @@
 rkt = "/usr/bin/rkt"
-image-prefix = "docker://"
 default-interactive-cmd = "sh"
 
 [environment]
@@ -13,6 +12,9 @@ run = ["--set-env=HOME=/home/{{.Username}}"]
 # --stdout=stream ought to work, but doesn't
 # see https://github.com/rkt/rkt/issues/3639
 image = ["--user={{.Uid}}", "--group={{.Gid}}", "--stdout=log"]
+
+[auto-image-prefix]
+"biocontainers/" = "docker://biocontainers/"
 
 [volume.home]
 volume = "kind=host,source={{.HomeDir}}"

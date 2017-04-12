@@ -31,11 +31,20 @@ func die(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
+func autoPrefix(image string, c *rktrunner.ConfigT) string {
+	for key, val := range c.AutoImagePrefix {
+		if strings.HasPrefix(image, key) {
+			return strings.Replace(image, key, val, 1)
+		}
+	}
+	return image
+}
+
 func parseArgs(c *rktrunner.ConfigT) (r runT, err error) {
 	r.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
 	r.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
 	r.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
-	r.options.noImagePrefix = goopt.Flag([]string{"--no-image-prefix"}, []string{}, "omit default image prefix", "")
+	r.options.noImagePrefix = goopt.Flag([]string{"-n", "--no-image-prefix"}, []string{}, "disable auto image prefix", "")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
 	goopt.Description = func() string {
@@ -59,11 +68,11 @@ $ rkt-run <options> <image> [<command> [<command-args>]]
 		err = fmt.Errorf("image cannot start with -")
 		return
 	}
-	var imagePrefix string
-	if !*r.options.noImagePrefix && c.ImagePrefix != "" {
-		imagePrefix = c.ImagePrefix
+	if !*r.options.noImagePrefix {
+		r.image = autoPrefix(args[0], c)
+	} else {
+		r.image = args[0]
 	}
-	r.image = fmt.Sprintf("%s%s", imagePrefix, args[0])
 
 	// command
 	if *r.options.exec != "" {
