@@ -13,6 +13,7 @@ type configT struct {
 	Environment           map[string]string
 	Options               map[string][]string
 	Volume                map[string]VolumeT
+	Alias                 map[string]ImageAliasT
 }
 
 type VolumeT struct {
@@ -20,31 +21,18 @@ type VolumeT struct {
 	Mount  string
 }
 
+type ImageAliasT struct {
+	Image string
+	Exec  []string
+}
+
 // valid options
 const GeneralOptions = "general"
 const RunOptions = "run"
 const ImageOptions = "image"
 
-// The first config file found is the one used.
-// There is a serious security hole if any of these files are writable
-// by other than root.
-var configFiles []string = []string{
-	// during development:
-	//"/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner.toml",
-	"/etc/rktrunner.toml",
-}
-
-func GetConfig(c *configT) error {
-	var err error
-	var path string
-configFileAttempts:
-	for _, path = range configFiles {
-		_, err = toml.DecodeFile(path, c)
-		if err != nil && os.IsNotExist(err) {
-			continue configFileAttempts
-		}
-		break configFileAttempts
-	}
+func GetConfig(path string, c *configT) error {
+	_, err := toml.DecodeFile(path, c)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			// provide some context

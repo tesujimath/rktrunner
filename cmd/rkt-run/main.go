@@ -13,7 +13,9 @@ func die(format string, args ...interface{}) {
 }
 
 func main() {
-	r, err := rktrunner.NewRunner()
+	// during development:
+	//r, err := rktrunner.NewRunner("/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner.toml")
+	r, err := rktrunner.NewRunner("/etc/rktrunner.toml")
 	if err != nil {
 		die("%v", err)
 	}
