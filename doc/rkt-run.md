@@ -19,6 +19,9 @@ alternative config file, requires --dry-run
 `-e`, `--exec` *command*
 command to run instead of image default
 
+`--set-env` *name=value*
+set environment variable in container
+
 `-i`, `--interactive`
 run image interactively
 

@@ -10,9 +10,13 @@
 
 ## environment
 
+[environment]
+
 *string* ` = ` *string* `# define environment variable`
 
 ## options
+
+[options]
 
 `general = ` *list-of-string* `# options passed to rkt program`
 
@@ -21,6 +25,8 @@
 `image = ` *list-of-string* `# options passed to image`
 
 ## auto-image-prefix
+
+[auto-image-prefix]
 
 *string* ` = ` *string* `# substitution performed on image prefix`
 

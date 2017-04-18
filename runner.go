@@ -16,6 +16,7 @@ import (
 type optionsT struct {
 	config        *string
 	exec          *string
+	setenvs       *[]string
 	interactive   *bool
 	verbose       *bool
 	dryRun        *bool
@@ -110,6 +111,7 @@ func (r *RunnerT) autoPrefix(image string) string {
 func (r *RunnerT) parseArgs() error {
 	r.args.options.config = goopt.String([]string{"--config"}, "", "alternative config file, requires --dry-run")
 	r.args.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
+	r.args.options.setenvs = goopt.Strings([]string{"--set-env"}, "", "environment variable")
 	r.args.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
 	r.args.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
 	r.args.options.dryRun = goopt.Flag([]string{"--dry-run"}, []string{}, "don't execute anything", "")
@@ -266,6 +268,11 @@ func (r *RunnerT) buildExec() error {
 		argv = append(argv, "--interactive")
 	}
 	argv = append(argv, r.fragments.Options[RunOptions]...)
+
+	for _, setenv := range *r.args.options.setenvs {
+		argv = append(argv, fmt.Sprintf("--set-env=%s", setenv))
+	}
+
 	argv = append(argv, r.fragments.formatVolumes()...)
 
 	if r.args.image == "" {
