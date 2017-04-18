@@ -8,7 +8,7 @@ RKT_EXPERIMENT_ATTACH = "true"
 
 [options]
 general = ["--insecure-options=image"]
-run = ["--net=host", "--inherit-env"]
+run = ["--net=host", "--set-env=HOME=/home/{{.Username}}", "--set-env=http_proxy={{.http_proxy}}", "--set-env=https_proxy={{.https_proxy}}"]
 # --stdout=stream ought to work, but doesn't
 # see https://github.com/rkt/rkt/issues/3639
 image = ["--user={{.Uid}}", "--group={{.Gid}}", "--stdout=log"]

@@ -27,18 +27,22 @@
 ## volume
 
 `[volume.` *identifier* `]`
+
 `volume = ` *string* `# parameters passed to --volume`
+
 `mount = ` *string* `# parameters passed to --mount`
 
 ## alias
 
 `[alias.` *identifier* `]`
+
 `image = ` *string* `# image name`
+
 `exec = ` *list-of-string* `# executables within image to expose as rkt-run aliases`
 
 # TEMPLATE VARIABLES
 
-The following template variables may be used.
+The following template variables may be used, in addition to any environment variable.
 
 `{{.HomeDir}}` user home directory
 
@@ -60,7 +64,7 @@ RKT_EXPERIMENT_ATTACH = "true"
 
 [options]
 general = ["--insecure-options=image"]
-run = ["--net=host", "--set-env=HOME=/home/{{.Username}}"]
+run = ["--net=host", "--set-env=HOME=/home/{{.Username}}", "--set-env=http_proxy={{.http_proxy}}", "--set-env=https_proxy={{.https_proxy}}"]
 # --stdout=stream ought to work, but doesn't
 # see https://github.com/rkt/rkt/issues/3639
 image = ["--user={{.Uid}}", "--group={{.Gid}}", "--stdout=log"]

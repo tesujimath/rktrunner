@@ -3,7 +3,6 @@ package rktrunner
 import (
 	"bytes"
 	"fmt"
-	"os/user"
 	"text/template"
 )
 
@@ -13,14 +12,14 @@ type fragmentsT struct {
 	Volume      map[string]VolumeT
 }
 
-func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
+func parseAndExecute(desc, tstr string, vars map[string]string) (string, error) {
 	var result string
-	t, err := template.New(desc).Parse(tstr)
+	t, err := template.New(desc).Option("missingkey=zero").Parse(tstr)
 	if err != nil {
 		return result, err
 	}
 	var b bytes.Buffer
-	err = t.Execute(&b, u)
+	err = t.Execute(&b, vars)
 	if err != nil {
 		return result, err
 	}
@@ -28,12 +27,12 @@ func parseAndExecute(desc, tstr string, u *user.User) (string, error) {
 	return result, nil
 }
 
-func GetFragments(c *configT, u *user.User, f *fragmentsT) error {
+func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 	var err error
 
 	f.Environment = make(map[string]string)
 	for envKey, envVal := range c.Environment {
-		f.Environment[envKey], err = parseAndExecute(fmt.Sprintf("environment %v", envKey), envVal, u)
+		f.Environment[envKey], err = parseAndExecute(fmt.Sprintf("environment %v", envKey), envVal, vars)
 		if err != nil {
 			return err
 		}
@@ -42,7 +41,7 @@ func GetFragments(c *configT, u *user.User, f *fragmentsT) error {
 	f.Options = make(map[string][]string)
 	for optKey, optVals := range c.Options {
 		for _, optVal := range optVals {
-			s, err := parseAndExecute(fmt.Sprintf("option %v", optKey), optVal, u)
+			s, err := parseAndExecute(fmt.Sprintf("option %v", optKey), optVal, vars)
 			if err != nil {
 				return err
 			}
@@ -54,13 +53,13 @@ func GetFragments(c *configT, u *user.User, f *fragmentsT) error {
 	for volKey, volVal := range c.Volume {
 		var volFrag VolumeT
 		if volVal.Volume != "" {
-			volFrag.Volume, err = parseAndExecute(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, u)
+			volFrag.Volume, err = parseAndExecute(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, vars)
 			if err != nil {
 				return err
 			}
 		}
 		if volVal.Mount != "" {
-			volFrag.Mount, err = parseAndExecute(fmt.Sprintf("volume %s mount", volKey), volVal.Mount, u)
+			volFrag.Mount, err = parseAndExecute(fmt.Sprintf("volume %s mount", volKey), volVal.Mount, vars)
 			if err != nil {
 				return err
 			}

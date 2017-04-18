@@ -4,7 +4,7 @@ rkt-run - enable unprivileged users to run containers using rkt
 
 # SYNOPSIS
 
-**rkt-run**\ [*options*] **image** [*args*]
+**rkt-run** [*options*] **image** [*args*]
 
 # DESCRIPTION
 

@@ -42,6 +42,7 @@ type commandT struct {
 
 type RunnerT struct {
 	config    configT
+	environ   map[string]string
 	alias     map[string]commandT
 	fragments fragmentsT
 	args      argsT
@@ -64,6 +65,8 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
 
+	r.parseEnviron()
+
 	err = r.registerAliases(os.Stderr, true)
 	if err != nil {
 		return nil, fmt.Errorf("configuration error: %v", err)
@@ -74,10 +77,12 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("failed to get current user: %v", err)
 	}
 
-	err = GetFragments(&r.config, u, &r.fragments)
+	err = GetFragments(&r.config, r.templateVariables(u), &r.fragments)
 	if err != nil {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
+
+	r.augmentEnviron(r.fragments.Environment)
 
 	// different functionality depending on options, see Execute()
 	switch {
@@ -196,22 +201,44 @@ func (r *RunnerT) printAliases(w io.Writer) {
 	}
 }
 
-// augmentEnviron overrides and/or augments the base environment with the extra
-func augmentEnviron(base []string, extra map[string]string) []string {
-	environ := make(map[string]string)
-	for _, keyval := range base {
+// parseEnviron extracts all environment variables into a map
+func (r *RunnerT) parseEnviron() {
+	r.environ = make(map[string]string)
+	for _, keyval := range os.Environ() {
 		i := strings.IndexRune(keyval, '=')
 		if i != -1 {
 			key := keyval[:i]
 			val := keyval[i+1:]
-			environ[key] = val
+			r.environ[key] = val
 		}
 	}
+}
+
+// augmentEnviron overrides and/or augments the base environment with the extra
+func (r *RunnerT) augmentEnviron(extra map[string]string) {
 	for key, val := range extra {
-		environ[key] = val
+		r.environ[key] = val
 	}
+}
+
+// templateVariables returns a new map, comprising the base environ,
+// augmented by (most of) the user fields
+func (r *RunnerT) templateVariables(u *user.User) map[string]string {
+	vars := make(map[string]string)
+	for k, v := range r.environ {
+		vars[k] = v
+	}
+	vars["Uid"] = u.Uid
+	vars["Gid"] = u.Gid
+	vars["Username"] = u.Username
+	vars["HomeDir"] = u.HomeDir
+	return vars
+}
+
+// buildEnviron turns the environ map into a list of strings
+func (r *RunnerT) buildEnviron() []string {
 	var result []string
-	for key, val := range environ {
+	for key, val := range r.environ {
 		result = append(result, fmt.Sprintf("%s=%s", key, val))
 	}
 	return result
@@ -284,7 +311,7 @@ func (r *RunnerT) buildExec() error {
 	}
 	r.exec.argv0 = argv0
 	r.exec.argv = argv
-	r.exec.envv = augmentEnviron(os.Environ(), r.fragments.Environment)
+	r.exec.envv = r.buildEnviron()
 	return nil
 }
 
