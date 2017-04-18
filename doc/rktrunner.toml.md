@@ -1,3 +1,55 @@
+# NAME
+
+/etc/rktrunner.toml - configuration file for rkt-run
+
+# SYNTAX
+
+`rkt = ` *string* `# path to rkt program`
+
+`default-interactive-cmd = ` *string* `# shell for interactive containers`
+
+## environment
+
+*string* ` = ` *string* `# define environment variable`
+
+## options
+
+`general = ` *list-of-string* `# options passed to rkt program`
+
+`run = ` *list-of-string* `# options passed to run subcommand`
+
+`image = ` *list-of-string* `# options passed to image`
+
+## auto-image-prefix
+
+*string* ` = ` *string* `# substitution performed on image prefix`
+
+## volume
+
+`[volume.` *identifier* `]`
+`volume = ` *string* `# parameters passed to --volume`
+`mount = ` *string* `# parameters passed to --mount`
+
+## alias
+
+`[alias.` *identifier* `]`
+`image = ` *string* `# image name`
+`exec = ` *list-of-string* `# executables within image to expose as rkt-run aliases`
+
+# TEMPLATE VARIABLES
+
+The following template variables may be used.
+
+`{{.HomeDir}}` user home directory
+
+`{{.Username}}` user login name
+
+`{{.Uid}}` numerical user id
+
+`{{.Gid}}` numerical group id
+
+# EXAMPLE
+```
 rkt = "/usr/bin/rkt"
 default-interactive-cmd = "sh"
 
@@ -74,3 +126,8 @@ image = "quay.io/biocontainers/stacks:1.44--0"
 
 [alias.trimmomatic_]
 image = "quay.io/biocontainers/trimmomatic:0.36--3"
+```
+
+# SEE ALSO
+
+rkt-run(1)
