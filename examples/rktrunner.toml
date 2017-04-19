@@ -64,8 +64,9 @@ exec = ["mafft"]
 [alias.qiime_]
 image = "quay.io/biocontainers/qiime:1.9.1--py27_0"
 
-[alias.ruby]
+[alias.ruby_]
 image = "docker://ruby"
+exec = ["ruby", "irb"]
 
 [alias.spades_]
 image = "quay.io/biocontainers/spades:3.10.1--py35_0"
