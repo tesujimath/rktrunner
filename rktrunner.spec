@@ -18,7 +18,8 @@ using rkt, in a controlled fashion.
 
 All rkt run options are controlled by the config file,
 /etc/rktrunner.toml, which should be carefully setup by the local
-sysadmin.
+sysadmin, perhaps based on the example which may be found in
+%{_datadir}/doc/%{name}-%{version}/rktrunner.toml.
 
 %prep
 %setup -q -c
@@ -26,7 +27,7 @@ sysadmin.
 %global packagehome %{gopath}/src/github.com/tesujimath/%{name}
 mkdir -p %{packagehome}
 mv %{name}-%{version}/* %{packagehome}
-mv %{packagehome}/{LICENSE,README.md} .
+mv %{packagehome}/{LICENSE,README.md,examples} .
 GOPATH=%{gopath} go get github.com/BurntSushi/toml github.com/droundy/goopt
 
 # Latest version of goopt introduced an incompatible change, with -v for --version
@@ -57,7 +58,7 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
-%doc LICENSE README.md
+%doc LICENSE README.md examples/rktrunner.toml
 %{_mandir}/man1/*
 %{_mandir}/man5/*
 %attr(04755,root,root) %{_bindir}/rkt-run
