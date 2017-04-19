@@ -352,7 +352,7 @@ func (r *RunnerT) Execute() error {
 		}
 
 		if !*r.args.options.dryRun {
-			if r.config.StripLogPrefix {
+			if r.config.StripLogPrefix && !*r.args.options.interactive {
 				// work-around for broken rkt stdout and stderr stream mode
 				return r.execWithStripLogPrefix()
 			} else {
