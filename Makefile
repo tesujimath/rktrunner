@@ -1,6 +1,7 @@
 # Makefile for rktrunner
 
 .PHONY: all program doc
+.INTERMEDIATE: doc/rkt-run.1 doc/rktrunner.toml.5
 
 all: program doc
 
