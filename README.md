@@ -4,6 +4,8 @@ This package provides the [rkt-run](doc/rkt-run.md) command, which
 is intended to be installed setuid root, to enabled unprivileged users
 to run containers using `rkt`, in a controlled fashion.
 
+There is also a `rkt-run-helper` command - see below.
+
 ## Basic Usage
 
 All `rkt run` options are controlled by the config file,
@@ -47,3 +49,20 @@ image = "quay.io/biocontainers/qiime:1.9.1--py27_0"
 
 For further information, see the manpages for [rkt-run](doc/rkt-run.md)
 and [rktrunner.toml](doc/rktrunner.toml.md)
+
+## rkt-run-helper
+
+`rkt-run-helper` is a simple wrapper, which invokes `rkt-run` passing
+as first argument the name it was invoked with, along with all the
+other arguments.
+
+The intended use is to have a directory on the system containing links
+to `rkt-run-helper`, with names `ruby`, `julia`, etc.  Then, if this
+directory is on the path, scripts starting with the standard shebang
+line as below will use `rkt-run` to run the containerized interpreter.
+This relies on aliases for these programs being defined in [rktrunner.toml](doc/rktrunner.toml.md).
+
+```
+#!/usr/bin/env ruby
+puts 'Hello World from Ruby version ' + RUBY_VERSION
+```

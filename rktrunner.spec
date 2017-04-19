@@ -40,9 +40,11 @@ GOPATH=%{gopath} make %{?_smp_mflags}
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}%{_bindir}
+mkdir -p %{buildroot}%{_libexecdir}/%{name}
 mkdir -p %{buildroot}%{_mandir}/man1 %{buildroot}%{_mandir}/man5
 
 install -m 0755 %{gopath}/bin/rkt-run %{buildroot}%{_bindir}
+install -m 0755 %{gopath}/bin/rkt-run-helper %{buildroot}%{_libexecdir}/%{name}
 install -m 0644 %{packagehome}/doc/rkt-run.1.gz %{buildroot}%{_mandir}/man1
 install -m 0644 %{packagehome}/doc/rktrunner.toml.5.gz %{buildroot}%{_mandir}/man5
 
@@ -56,7 +58,7 @@ rm -rf %{buildroot}
 %{_mandir}/man1/*
 %{_mandir}/man5/*
 %attr(04755,root,root) %{_bindir}/rkt-run
-
+%{_libexecdir}/%{name}
 
 %changelog
 * Tue Apr 18 2017 Simon Guest <simon.guest@tesujimath.org>

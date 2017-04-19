@@ -1,12 +1,15 @@
 # Makefile for rktrunner
 
-.PHONY: all program doc
+.PHONY: all doc rkt-run rkt-run-helper
 .INTERMEDIATE: doc/rkt-run.1 doc/rktrunner.toml.5
 
-all: program doc
+all: rkt-run rkt-run-helper doc
 
-program:
+rkt-run:
 	go install github.com/tesujimath/rktrunner/cmd/rkt-run
+
+rkt-run-helper:
+	go install github.com/tesujimath/rktrunner/cmd/rkt-run-helper
 
 doc: doc/rkt-run.1.gz doc/rktrunner.toml.5.gz
 
