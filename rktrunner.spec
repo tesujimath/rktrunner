@@ -30,12 +30,6 @@ mv %{name}-%{version}/* %{packagehome}
 mv %{packagehome}/{LICENSE,README.md,examples} .
 GOPATH=%{gopath} go get github.com/BurntSushi/toml github.com/droundy/goopt
 
-# Latest version of goopt introduced an incompatible change, with -v for --version
-# and there's no issue tracker upstream to report this (AARGGGHH!)
-# so for now, we use the older version.  Later, we'll probably switch to a
-# saner options package that doesn't make this sort of change.
-cd %{gopath}/src/github.com/droundy/goopt; git checkout 7c1d66c0
-
 %define debug_package %{nil}
 
 %build
