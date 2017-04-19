@@ -1,13 +1,16 @@
 package rktrunner
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/droundy/goopt"
 	"io"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -349,7 +352,75 @@ func (r *RunnerT) Execute() error {
 		}
 
 		if !*r.args.options.dryRun {
-			return syscall.Exec(r.exec.argv0, r.exec.argv, r.exec.envv)
+			if r.config.StripLogPrefix {
+				// work-around for broken rkt stdout and stderr stream mode
+				return r.execWithStripLogPrefix()
+			} else {
+				return syscall.Exec(r.exec.argv0, r.exec.argv, r.exec.envv)
+			}
+		}
+	}
+	return nil
+}
+
+// execWithStripLogPrefix is a work-around for the currently broken stream mode in rkt stdout/stderr
+func (r *RunnerT) execWithStripLogPrefix() error {
+	// Use a command, so we can capture stdout.
+	//
+	// Note that for now, container stderr is merged into stdout by rkt,
+	// so we don't handle stderr here.
+	//
+	// Hopefully by the time stderr is handled separately, the stream mode
+	// will be working, so this code won't be needed.
+	cmd := exec.Command(r.exec.argv[0], r.exec.argv[1:]...)
+	cmd.Path = r.exec.argv0
+	cmd.Env = r.exec.envv
+	cmd.Stdin = os.Stdin
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+	stripLogPrefix(stdout, os.Stdout)
+	return cmd.Wait()
+}
+
+// stripLogPrefix copies lines from the reader to writer,
+// stripping the log prefix from each line
+func stripLogPrefix(r io.Reader, w io.Writer) error {
+	prefix, err := regexp.Compile("^[^:]*: ")
+	if err != nil {
+		return err
+	}
+	reader := bufio.NewReader(r)
+	eof := false
+	for {
+		bytes, err := reader.ReadBytes('\n')
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			eof = true
+		}
+		if bytes != nil {
+			output := bytes
+			loc := prefix.FindIndex(output)
+			if loc != nil {
+				output = output[loc[1]:]
+			}
+			_, err = w.Write(output)
+			if err != nil {
+				return err
+			}
+		}
+		if eof {
+			break
 		}
 	}
 	return nil

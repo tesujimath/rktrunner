@@ -8,6 +8,8 @@
 
 `default-interactive-cmd = ` *string* `# shell for interactive containers`
 
+`strip-log-prefix = ` *bool* `# strip log prefix from stdout`
+
 ## environment
 
 [environment]

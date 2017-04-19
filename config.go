@@ -10,6 +10,7 @@ type configT struct {
 	Rkt                   string
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
+	StripLogPrefix        bool              `toml:"strip-log-prefix"`
 	Environment           map[string]string
 	Options               map[string][]string
 	Volume                map[string]VolumeT
