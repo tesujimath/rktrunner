@@ -45,6 +45,7 @@ mkdir -p %{buildroot}%{_mandir}/man1 %{buildroot}%{_mandir}/man5
 
 install -m 0755 %{gopath}/bin/rkt-run %{buildroot}%{_bindir}
 install -m 0755 %{gopath}/bin/rkt-run-helper %{buildroot}%{_libexecdir}/%{name}
+install -m 0755 %{gopath}/bin/rkt-run-slave %{buildroot}%{_libexecdir}/%{name}
 install -m 0644 %{packagehome}/doc/rkt-run.1.gz %{buildroot}%{_mandir}/man1
 install -m 0644 %{packagehome}/doc/rktrunner.toml.5.gz %{buildroot}%{_mandir}/man5
 
