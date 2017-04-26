@@ -21,6 +21,7 @@ func main() {
 	attach := rktrunner.NewAttacher(donePath, environ)
 	attach.ByName(appName)
 	err := attach.Wait()
-	// TODO remove:
-	fmt.Printf("rkt-attach-by-name ending %v\n", err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rkt-attach-by-name: %v\n", err)
+	}
 }

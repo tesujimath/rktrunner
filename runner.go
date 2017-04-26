@@ -437,13 +437,21 @@ func (r *RunnerT) Execute() error {
 			var attach *Attacher
 			if r.attachStdio() {
 				attach = NewAttacher(attachReadyPath, r.exec.envv)
-				// TODO: attach.ByName(r.appName)
+				attach.ByName(r.appName)
 			}
 
 			err := r.execAndWait()
 
-			if err != nil && r.attachStdio() {
-				attach.Abort()
+			if r.attachStdio() {
+				if err != nil {
+					attach.Abort()
+				} else {
+					// ignore errors on cleanup
+					warn := attach.Wait()
+					if warn != nil {
+						fmt.Fprintf(os.Stderr, "%v\n", warn)
+					}
+				}
 			}
 
 			if r.runSlave() {
@@ -469,13 +477,5 @@ func (r *RunnerT) execAndWait() error {
 	cmd := exec.Command(r.exec.argv[0], r.exec.argv[1:]...)
 	cmd.Path = r.exec.argv0
 	cmd.Env = r.exec.envv
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	// TODO remove
-	fmt.Printf("%s\n", strings.Join(r.exec.argv, " "))
-	err := cmd.Run()
-	fmt.Printf("done %s (%v)\n", strings.Join(r.exec.argv, " "), err)
-	return err
+	return cmd.Run()
 }

@@ -55,7 +55,6 @@ loop:
 
 		if uuid == "" {
 			// wait for a while
-			fmt.Printf("attacher: waiting ...\n")
 			timeout := time.After(time.Duration(time.Second))
 			select {
 			case _, ok := <-a.abort:
@@ -127,7 +126,6 @@ func (a *Attacher) attachByUuid(uuid string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Printf("%s\n", strings.Join(args, " "))
 	err := cmd.Run()
 	if err != nil {
 		a.rktAttachStatus <- err
