@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"os"
+	"path/filepath"
 )
 
 type configT struct {
 	Rkt                   string
+	AttachStdio           bool              `toml:"attach-stdio"`
+	PreserveCwd           bool              `toml:"preserve-cwd"`
+	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
 	StripLogPrefix        bool              `toml:"strip-log-prefix"`
-	Environment           map[string]string
 	Options               map[string][]string
 	Volume                map[string]VolumeT
 	Alias                 map[string]ImageAliasT
@@ -45,6 +48,20 @@ func GetConfig(path string, c *configT) error {
 	// validate options
 	if c.Rkt == "" {
 		return fmt.Errorf("missing rkt")
+	}
+
+	if c.AttachStdio && c.ExecSlaveDir == "" {
+		return fmt.Errorf("attach-stdio requires exec-slave-dir")
+	}
+	if c.PreserveCwd && c.ExecSlaveDir == "" {
+		return fmt.Errorf("preserve-stdio requires exec-slave-dir")
+	}
+	if c.ExecSlaveDir != "" {
+		p := filepath.Join(c.ExecSlaveDir, slaveRunner)
+		_, err := os.Stat(p)
+		if err != nil {
+			return err
+		}
 	}
 
 	type validOptionsT map[string]bool

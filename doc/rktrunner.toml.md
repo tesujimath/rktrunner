@@ -8,13 +8,13 @@
 
 `default-interactive-cmd = ` *string* `# shell for interactive containers`
 
+`attach-stdio = ` *bool* `# whether to use experimental rkt attach for stdin,stdout,stderr streams`
+
+`preserve-cwd = ` *bool* `# whether to change to the host working directory in the container`
+
+`exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
+
 `strip-log-prefix = ` *bool* `# strip log prefix from stdout`
-
-## environment
-
-[environment]
-
-*string* ` = ` *string* `# define environment variable`
 
 ## options
 
@@ -64,18 +64,14 @@ The following template variables may be used, in addition to any environment var
 ```
 rkt = "/usr/bin/rkt"
 default-interactive-cmd = "sh"
-
-[environment]
-# needed for per-application options --stdout, etc
-# as per https://github.com/rkt/rkt/issues/3639
-RKT_EXPERIMENT_ATTACH = "true"
+attach-stdio = true
+preserve-cwd = true
+exec-slave-dir = "/usr/libexec/rktrunner"
 
 [options]
 general = ["--insecure-options=image"]
 run = ["--net=host", "--set-env=HOME=/home/{{.Username}}", "--set-env=http_proxy={{.http_proxy}}", "--set-env=https_proxy={{.https_proxy}}"]
-# --stdout=stream ought to work, but doesn't
-# see https://github.com/rkt/rkt/issues/3639
-image = ["--user={{.Uid}}", "--group={{.Gid}}", "--stdout=log"]
+image = ["--user={{.Uid}}", "--group={{.Gid}}"]
 
 [auto-image-prefix]
 "biocontainers/" = "docker://biocontainers/"

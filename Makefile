@@ -3,13 +3,16 @@
 .PHONY: all doc rkt-run rkt-run-helper
 .INTERMEDIATE: doc/rkt-run.1 doc/rktrunner.toml.5
 
-all: rkt-run rkt-run-helper doc
+all: rkt-run rkt-run-helper rkt-run-slave doc
 
 rkt-run:
 	go install github.com/tesujimath/rktrunner/cmd/rkt-run
 
 rkt-run-helper:
 	go install github.com/tesujimath/rktrunner/cmd/rkt-run-helper
+
+rkt-run-slave:
+	go install github.com/tesujimath/rktrunner/cmd/rkt-run-slave
 
 doc: doc/rkt-run.1.gz doc/rktrunner.toml.5.gz
 

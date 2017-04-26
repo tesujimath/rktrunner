@@ -1,7 +1,6 @@
 package rktrunner
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/droundy/goopt"
@@ -10,10 +9,8 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 type optionsT struct {
@@ -45,12 +42,13 @@ type commandT struct {
 }
 
 type RunnerT struct {
-	config    configT
-	environ   map[string]string
-	alias     map[string]commandT
-	fragments fragmentsT
-	args      argsT
-	exec      execT
+	config       configT
+	environ      map[string]string
+	environExtra map[string]string
+	alias        map[string]commandT
+	fragments    fragmentsT
+	args         argsT
+	exec         execT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -86,7 +84,9 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
 
-	r.augmentEnviron(r.fragments.Environment)
+	if r.attachStdio() {
+		r.environExtra["RKT_EXPERIMENT_ATTACH"] = "true"
+	}
 
 	// different functionality depending on options, see Execute()
 	switch {
@@ -100,6 +100,17 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	}
 
 	return &r, nil
+}
+
+// attachStdio returns whether we need to attach stdio,
+// which we don't do in interactive mode
+func (r *RunnerT) attachStdio() bool {
+	return r.config.AttachStdio && !*r.args.options.interactive
+}
+
+// runSlave returns whether we need to run the slave
+func (r *RunnerT) runSlave() bool {
+	return r.attachStdio() || r.config.PreserveCwd
 }
 
 func (r *RunnerT) autoPrefix(image string) string {
@@ -209,6 +220,7 @@ func (r *RunnerT) printAliases(w io.Writer) {
 // parseEnviron extracts all environment variables into a map
 func (r *RunnerT) parseEnviron() {
 	r.environ = make(map[string]string)
+	r.environExtra = make(map[string]string)
 	for _, keyval := range os.Environ() {
 		i := strings.IndexRune(keyval, '=')
 		if i != -1 {
@@ -216,13 +228,6 @@ func (r *RunnerT) parseEnviron() {
 			val := keyval[i+1:]
 			r.environ[key] = val
 		}
-	}
-}
-
-// augmentEnviron overrides and/or augments the base environment with the extra
-func (r *RunnerT) augmentEnviron(extra map[string]string) {
-	for key, val := range extra {
-		r.environ[key] = val
 	}
 }
 
@@ -240,10 +245,17 @@ func (r *RunnerT) templateVariables(u *user.User) map[string]string {
 	return vars
 }
 
-// buildEnviron turns the environ map into a list of strings
+// buildEnviron turns the environ maps into a list of strings
 func (r *RunnerT) buildEnviron() []string {
 	var result []string
+	mergedEnviron := make(map[string]string)
 	for key, val := range r.environ {
+		mergedEnviron[key] = val
+	}
+	for key, val := range r.environExtra {
+		mergedEnviron[key] = val
+	}
+	for key, val := range mergedEnviron {
 		result = append(result, fmt.Sprintf("%s=%s", key, val))
 	}
 	return result
@@ -261,6 +273,26 @@ func (r *RunnerT) resolveCommand() commandT {
 	return cmd
 }
 
+func (r *RunnerT) formatVolumes() []string {
+	volumes := r.fragments.formatVolumes()
+	if r.runSlave() {
+		volumes = append(volumes,
+			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()),
+			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
+	}
+	return volumes
+}
+
+func (r *RunnerT) formatMounts() []string {
+	mounts := r.fragments.formatMounts()
+	if r.runSlave() {
+		mounts = append(mounts,
+			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir),
+			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveBinVolume, slaveBinDir))
+	}
+	return mounts
+}
+
 func (r *RunnerT) buildExec() error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
@@ -270,13 +302,14 @@ func (r *RunnerT) buildExec() error {
 	if *r.args.options.interactive {
 		argv = append(argv, "--interactive")
 	}
+
 	argv = append(argv, r.fragments.Options[RunOptions]...)
 
 	for _, setenv := range *r.args.options.setenvs {
 		argv = append(argv, fmt.Sprintf("--set-env=%s", setenv))
 	}
 
-	argv = append(argv, r.fragments.formatVolumes()...)
+	argv = append(argv, r.formatVolumes()...)
 
 	if r.args.image == "" {
 		return fmt.Errorf("missing image")
@@ -286,7 +319,11 @@ func (r *RunnerT) buildExec() error {
 	cmd := r.resolveCommand()
 	argv = append(argv, cmd.image)
 
-	argv = append(argv, r.fragments.formatMounts()...)
+	if r.attachStdio() {
+		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
+	}
+
+	argv = append(argv, r.formatMounts()...)
 	argv = append(argv, r.fragments.Options[ImageOptions]...)
 
 	switch {
@@ -301,11 +338,29 @@ func (r *RunnerT) buildExec() error {
 	case *r.args.options.interactive && r.config.DefaultInteractiveCmd != "":
 		cmd.exec = r.config.DefaultInteractiveCmd
 	}
-	if cmd.exec != "" {
-		if cmd.exec[0] == '-' {
-			return fmt.Errorf("command cannot start with -")
+	if cmd.exec != "" && cmd.exec[0] == '-' {
+		return fmt.Errorf("command cannot start with -")
+	}
+
+	if r.runSlave() {
+		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
+		if r.attachStdio() {
+			argv = append(argv, "--await-file", filepath.Join(slaveRunDir, attachReadyFile))
 		}
-		argv = append(argv, "--exec", cmd.exec)
+		if r.config.PreserveCwd {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			argv = append(argv, "--cwd", cwd)
+		}
+		if cmd.exec != "" {
+			argv = append(argv, cmd.exec)
+		}
+	} else {
+		if cmd.exec != "" {
+			argv = append(argv, "--exec", cmd.exec, "--")
+		}
 	}
 
 	if len(r.args.cmdArgs) > 0 {
@@ -316,7 +371,6 @@ func (r *RunnerT) buildExec() error {
 			}
 		}
 
-		argv = append(argv, "--")
 		argv = append(argv, r.args.cmdArgs...)
 	}
 	r.exec.argv0 = argv0
@@ -326,15 +380,14 @@ func (r *RunnerT) buildExec() error {
 }
 
 func (r *RunnerT) printExec(w io.Writer) {
-	environ := r.fragments.Environment
 	// get keys in order
 	var keys []string
-	for key := range environ {
+	for key := range r.environExtra {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		fmt.Fprintf(w, "%s=%s ", key, environ[key])
+		fmt.Fprintf(w, "%s=%s ", key, r.environExtra[key])
 	}
 
 	fmt.Fprintf(w, "%s %s\n", r.exec.argv0, strings.Join(r.exec.argv[1:], " "))
@@ -352,76 +405,41 @@ func (r *RunnerT) Execute() error {
 		}
 
 		if !*r.args.options.dryRun {
-			if r.config.StripLogPrefix && !*r.args.options.interactive {
-				// work-around for broken rkt stdout and stderr stream mode
-				return r.execWithStripLogPrefix()
-			} else {
-				return syscall.Exec(r.exec.argv0, r.exec.argv, r.exec.envv)
+			rundir := masterRunDir()
+			if r.runSlave() {
+				err := os.Mkdir(rundir, os.ModeDir|0755)
+				if err != nil {
+					return err
+				}
 			}
+
+			err := r.execAndWait()
+
+			if r.runSlave() {
+				// ignore errors on cleanup
+				warn := os.Remove(filepath.Join(rundir, attachReadyFile))
+				if warn != nil {
+					fmt.Fprintf(os.Stderr, "%v\n", warn)
+				}
+				warn = os.Remove(rundir)
+				if warn != nil {
+					fmt.Fprintf(os.Stderr, "%v\n", warn)
+				}
+			}
+
+			return err
 		}
 	}
 	return nil
 }
 
-// execWithStripLogPrefix is a work-around for the currently broken stream mode in rkt stdout/stderr
-func (r *RunnerT) execWithStripLogPrefix() error {
-	// Use a command, so we can capture stdout.
-	//
-	// Note that for now, container stderr is merged into stdout by rkt,
-	// so we don't handle stderr here.
-	//
-	// Hopefully by the time stderr is handled separately, the stream mode
-	// will be working, so this code won't be needed.
+// execAndWait runs the command, waiting for it to complete
+func (r *RunnerT) execAndWait() error {
 	cmd := exec.Command(r.exec.argv[0], r.exec.argv[1:]...)
 	cmd.Path = r.exec.argv0
 	cmd.Env = r.exec.envv
 	cmd.Stdin = os.Stdin
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	err = cmd.Start()
-	if err != nil {
-		return err
-	}
-	stripLogPrefix(stdout, os.Stdout)
-	return cmd.Wait()
-}
-
-// stripLogPrefix copies lines from the reader to writer,
-// stripping the log prefix from each line
-func stripLogPrefix(r io.Reader, w io.Writer) error {
-	prefix, err := regexp.Compile("^[^:]*: ")
-	if err != nil {
-		return err
-	}
-	reader := bufio.NewReader(r)
-	eof := false
-	for {
-		bytes, err := reader.ReadBytes('\n')
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			eof = true
-		}
-		if bytes != nil {
-			output := bytes
-			loc := prefix.FindIndex(output)
-			if loc != nil {
-				output = output[loc[1]:]
-			}
-			_, err = w.Write(output)
-			if err != nil {
-				return err
-			}
-		}
-		if eof {
-			break
-		}
-	}
-	return nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
