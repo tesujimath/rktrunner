@@ -42,14 +42,14 @@ type commandT struct {
 }
 
 type RunnerT struct {
-	config        configT
-	environ       map[string]string
-	environExtra  map[string]string
-	alias         map[string]commandT
-	fragments     fragmentsT
-	args          argsT
-	containerName string
-	exec          execT
+	config       configT
+	environ      map[string]string
+	environExtra map[string]string
+	alias        map[string]commandT
+	fragments    fragmentsT
+	args         argsT
+	appName      string
+	exec         execT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -294,7 +294,7 @@ func (r *RunnerT) formatMounts() []string {
 	return mounts
 }
 
-func generateUniqueContainerName(image string) string {
+func generateUniqueAppName(image string) string {
 	var start int
 	var basename string
 	lastSlash := strings.LastIndex(image, "/")
@@ -336,8 +336,8 @@ func (r *RunnerT) buildExec() error {
 	cmd := r.resolveCommand()
 	argv = append(argv, cmd.image)
 
-	r.containerName = generateUniqueContainerName(cmd.image)
-	argv = append(argv, "--name", r.containerName)
+	r.appName = generateUniqueAppName(cmd.image)
+	argv = append(argv, "--name", r.appName)
 
 	if r.attachStdio() {
 		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
@@ -437,7 +437,7 @@ func (r *RunnerT) Execute() error {
 			var attach *Attacher
 			if r.attachStdio() {
 				attach = NewAttacher(attachReadyPath, r.exec.envv)
-				attach.ByName(r.containerName)
+				attach.ByName(r.appName)
 			}
 
 			err := r.execAndWait()

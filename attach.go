@@ -28,20 +28,20 @@ func (a *Attacher) warn(err error) {
 	fmt.Fprintf(os.Stderr, "rkt-run: warning: attach failure %v\n", err)
 }
 
-func (a *Attacher) ByName(containerName string) {
-	go a.run(containerName)
+func (a *Attacher) ByName(appName string) {
+	go a.run(appName)
 }
 
 func (a *Attacher) Abort() {
 	a.abort <- true
 }
 
-func (a *Attacher) run(containerName string) {
+func (a *Attacher) run(appName string) {
 	var uuid string
 	var err error
 loop:
 	for uuid == "" && err == nil {
-		uuid, err = findUuid(containerName)
+		uuid, err = findUuid(appName)
 		if err != nil {
 			a.warn(err)
 		}
@@ -79,7 +79,7 @@ loop:
 
 // findUuid returns the uuid for the named container,
 // or an empty string if it isn't found
-func findUuid(containerName string) (uuid string, err error) {
+func findUuid(appName string) (uuid string, err error) {
 	cmd := exec.Command("rkt", "list", "--full", "--no-legend")
 	var stdout io.ReadCloser
 	stdout, err = cmd.StdoutPipe()
@@ -95,7 +95,7 @@ func findUuid(containerName string) (uuid string, err error) {
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if fields[1] == containerName {
+		if fields[1] == appName {
 			uuid = fields[0]
 		}
 	}
