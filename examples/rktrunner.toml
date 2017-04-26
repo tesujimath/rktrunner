@@ -4,7 +4,6 @@ preserve-cwd = true
 exec-slave-dir = "/usr/libexec/rktrunner"
 #exec-slave-dir = "/home/guestsi/go/bin"
 default-interactive-cmd = "sh"
-strip-log-prefix = true
 
 [options]
 general = ["--insecure-options=image"]
@@ -60,8 +59,9 @@ exec = ["blastn","blastp","blastx","tblastn","tblastx"]
 image = "quay.io/biocontainers/canu:1.4--1"
 exec = ["canu"]
 
-[alias.julia]
+[alias.julia_]
 image = "docker://julia"
+exec = ["julia"]
 
 [alias.mafft_]
 image = "quay.io/biocontainers/mafft:7.305--0"
