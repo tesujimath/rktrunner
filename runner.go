@@ -42,13 +42,14 @@ type commandT struct {
 }
 
 type RunnerT struct {
-	config       configT
-	environ      map[string]string
-	environExtra map[string]string
-	alias        map[string]commandT
-	fragments    fragmentsT
-	args         argsT
-	exec         execT
+	config        configT
+	environ       map[string]string
+	environExtra  map[string]string
+	alias         map[string]commandT
+	fragments     fragmentsT
+	args          argsT
+	containerName string
+	exec          execT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -293,6 +294,22 @@ func (r *RunnerT) formatMounts() []string {
 	return mounts
 }
 
+func generateUniqueContainerName(image string) string {
+	var start int
+	var basename string
+	lastSlash := strings.LastIndex(image, "/")
+	if lastSlash >= 0 {
+		start = lastSlash + 1
+	}
+	firstColon := strings.Index(image[start:], ":")
+	if firstColon >= 0 {
+		basename = image[start:firstColon]
+	} else {
+		basename = image[start:]
+	}
+	return fmt.Sprintf("%s-%d", basename, os.Getpid())
+}
+
 func (r *RunnerT) buildExec() error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
@@ -318,6 +335,9 @@ func (r *RunnerT) buildExec() error {
 	}
 	cmd := r.resolveCommand()
 	argv = append(argv, cmd.image)
+
+	r.containerName = generateUniqueContainerName(cmd.image)
+	argv = append(argv, "--name", r.containerName)
 
 	if r.attachStdio() {
 		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
@@ -406,6 +426,7 @@ func (r *RunnerT) Execute() error {
 
 		if !*r.args.options.dryRun {
 			rundir := masterRunDir()
+			attachReadyPath := filepath.Join(rundir, attachReadyFile)
 			if r.runSlave() {
 				err := os.Mkdir(rundir, os.ModeDir|0755)
 				if err != nil {
@@ -413,11 +434,21 @@ func (r *RunnerT) Execute() error {
 				}
 			}
 
+			var attach *Attacher
+			if r.attachStdio() {
+				attach = NewAttacher(attachReadyPath, r.exec.envv)
+				attach.ByName(r.containerName)
+			}
+
 			err := r.execAndWait()
+
+			if r.attachStdio() {
+				attach.Abort()
+			}
 
 			if r.runSlave() {
 				// ignore errors on cleanup
-				warn := os.Remove(filepath.Join(rundir, attachReadyFile))
+				warn := os.Remove(attachReadyPath)
 				if warn != nil {
 					fmt.Fprintf(os.Stderr, "%v\n", warn)
 				}
