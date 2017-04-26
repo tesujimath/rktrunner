@@ -11,20 +11,22 @@ import (
 )
 
 type Attacher struct {
-	donePath string
-	environ  []string
-	abort    chan bool
+	donePath        string
+	environ         []string
+	abort           chan bool
+	rktAttachStatus chan error
 }
 
 func NewAttacher(donePath string, environ []string) *Attacher {
 	return &Attacher{
-		donePath: donePath,
-		environ:  environ,
-		abort:    make(chan bool),
+		donePath:        donePath,
+		environ:         environ,
+		abort:           make(chan bool),
+		rktAttachStatus: make(chan error),
 	}
 }
 
-func (a *Attacher) warn(err error) {
+func attacherWarn(err error) {
 	fmt.Fprintf(os.Stderr, "rkt-run: warning: attach failure %v\n", err)
 }
 
@@ -33,7 +35,12 @@ func (a *Attacher) ByName(appName string) {
 }
 
 func (a *Attacher) Abort() {
-	a.abort <- true
+	close(a.abort)
+}
+
+func (a *Attacher) Wait() error {
+	err := <-a.rktAttachStatus
+	return err
 }
 
 func (a *Attacher) run(appName string) {
@@ -43,7 +50,7 @@ loop:
 	for uuid == "" && err == nil {
 		uuid, err = findUuid(appName)
 		if err != nil {
-			a.warn(err)
+			attacherWarn(err)
 		}
 
 		if uuid == "" {
@@ -51,9 +58,11 @@ loop:
 			fmt.Printf("attacher: waiting ...\n")
 			timeout := time.After(time.Duration(time.Second))
 			select {
-			case <-a.abort:
-				a.warn(fmt.Errorf("abort"))
-				break loop
+			case _, ok := <-a.abort:
+				if !ok {
+					attacherWarn(fmt.Errorf("abort"))
+					break loop
+				}
 			case <-timeout:
 				// go around again
 			}
@@ -61,17 +70,17 @@ loop:
 	}
 
 	if uuid != "" {
-		err = attachByUuid(uuid, a.environ)
-		fmt.Printf("attachByUuid %v", err)
-		if err != nil {
-			a.warn(err)
-		}
+		go a.attachByUuid(uuid)
 	}
 
-	// signal we're done
+	// Give the asynchronous rkt attach a chance to do its thing.
+	// This is rather unsatisfactory.
+	time.Sleep(time.Duration(1000 * time.Millisecond))
+
+	// notify slave that attachment is ready
 	f, err := os.Create(a.donePath)
 	if err != nil {
-		a.warn(err)
+		attacherWarn(err)
 		return
 	}
 	f.Close()
@@ -109,11 +118,19 @@ func findUuid(appName string) (uuid string, err error) {
 	return
 }
 
-// attachByUuid attaches to a container by UUID
-func attachByUuid(uuid string, environ []string) error {
+// attachByUuid attaches to a container by UUID.
+// Any error is just printed, as this must be run asynchronously.
+func (a *Attacher) attachByUuid(uuid string) {
 	args := []string{"rkt", "attach", "--mode", "stdin,stdout,stderr", uuid}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = environ
+	cmd.Env = a.environ
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	fmt.Printf("%s\n", strings.Join(args, " "))
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil {
+		a.rktAttachStatus <- err
+	}
+	close(a.rktAttachStatus)
 }

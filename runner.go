@@ -437,12 +437,12 @@ func (r *RunnerT) Execute() error {
 			var attach *Attacher
 			if r.attachStdio() {
 				attach = NewAttacher(attachReadyPath, r.exec.envv)
-				attach.ByName(r.appName)
+				// TODO: attach.ByName(r.appName)
 			}
 
 			err := r.execAndWait()
 
-			if r.attachStdio() {
+			if err != nil && r.attachStdio() {
 				attach.Abort()
 			}
 
@@ -472,5 +472,10 @@ func (r *RunnerT) execAndWait() error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+
+	// TODO remove
+	fmt.Printf("%s\n", strings.Join(r.exec.argv, " "))
+	err := cmd.Run()
+	fmt.Printf("done %s (%v)\n", strings.Join(r.exec.argv, " "), err)
+	return err
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/tesujimath/rktrunner"
 	"os"
-	"time"
 )
 
 func die(format string, args ...interface{}) {
@@ -14,12 +13,14 @@ func die(format string, args ...interface{}) {
 
 func main() {
 	if len(os.Args) != 3 {
-		die("%s", "usage: rkt-attach <app-name> <done-path>")
+		die("%s", "usage: rkt-attach-by-name <app-name> <done-path>")
 	}
 	environ := append(os.Environ(), "RKT_EXPERIMENT_ATTACH=true")
 	appName := os.Args[1]
 	donePath := os.Args[2]
 	attach := rktrunner.NewAttacher(donePath, environ)
 	attach.ByName(appName)
-	time.Sleep(time.Duration(10 * time.Second))
+	err := attach.Wait()
+	// TODO remove:
+	fmt.Printf("rkt-attach-by-name ending %v\n", err)
 }
