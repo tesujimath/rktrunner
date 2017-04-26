@@ -14,8 +14,6 @@
 
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
-`strip-log-prefix = ` *bool* `# strip log prefix from stdout`
-
 ## options
 
 [options]
@@ -63,15 +61,24 @@ The following template variables may be used, in addition to any environment var
 # EXAMPLE
 ```
 rkt = "/usr/bin/rkt"
-default-interactive-cmd = "sh"
 attach-stdio = true
 preserve-cwd = true
 exec-slave-dir = "/usr/libexec/rktrunner"
+default-interactive-cmd = "sh"
 
 [options]
 general = ["--insecure-options=image"]
-run = ["--net=host", "--set-env=HOME=/home/{{.Username}}", "--set-env=http_proxy={{.http_proxy}}", "--set-env=https_proxy={{.https_proxy}}"]
-image = ["--user={{.Uid}}", "--group={{.Gid}}"]
+run = [
+    "--net=host",
+    "--set-env=HOME=/home/{{.Username}}",
+    "--set-env=http_proxy={{.http_proxy}}",
+    "--set-env=https_proxy={{.https_proxy}}",
+]
+image = [
+    "--user={{.Uid}}",
+    "--group={{.Gid}}",
+    "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
+]
 
 [auto-image-prefix]
 "biocontainers/" = "docker://biocontainers/"
@@ -113,8 +120,9 @@ exec = ["blastn","blastp","blastx","tblastn","tblastx"]
 image = "quay.io/biocontainers/canu:1.4--1"
 exec = ["canu"]
 
-[alias.julia]
+[alias.julia_]
 image = "docker://julia"
+exec = ["julia"]
 
 [alias.mafft_]
 image = "quay.io/biocontainers/mafft:7.305--0"

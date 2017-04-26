@@ -4,7 +4,26 @@ This package provides the [rkt-run](doc/rkt-run.md) command, which
 is intended to be installed setuid root, to enabled unprivileged users
 to run containers using `rkt`, in a controlled fashion.
 
-There is also a `rkt-run-helper` command - see below.
+There are also `rkt-run-helper` and `rkt-run-slave` commands - see below.
+
+`rkt-run` provides the following features:
+
+* enable unprivileged users to run rkt
+
+* attachment of stdin/stdout/stderr to container
+
+* preservation of working directory of host within container
+
+The system-wide configuration enables the system administrator to
+control the following aspects of the `rkt run` command line:
+
+* aliases for images and their executables
+
+* volumes to be mounted
+
+* automatic prefix re-writing of image names
+
+* general, run, and image options
 
 ## Basic Usage
 
@@ -66,3 +85,10 @@ This relies on aliases for these programs being defined in [rktrunner.toml](doc/
 #!/usr/bin/env ruby
 puts 'Hello World from Ruby version ' + RUBY_VERSION
 ```
+
+## rkt-run-slave
+
+`rkt-run-slave` is another wrapper, which runs within the container.
+It optionally waits for stdio attachment before running the target
+program, and also optionally changes to the working directory as on
+the host.
