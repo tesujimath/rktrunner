@@ -8,11 +8,16 @@ strip-log-prefix = true
 
 [options]
 general = ["--insecure-options=image"]
-run = ["--net=host", "--set-env=HOME=/home/{{.Username}}", "--set-env=http_proxy={{.http_proxy}}", "--set-env=https_proxy={{.https_proxy}}"]
+run = [
+    "--net=host",
+    "--set-env=HOME=/home/{{.Username}}",
+    "--set-env=http_proxy={{.http_proxy}}",
+    "--set-env=https_proxy={{.https_proxy}}",
+]
 image = [
-      "--user={{.Uid}}",
-      "--group={{.Gid}}",
-      "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
+    "--user={{.Uid}}",
+    "--group={{.Gid}}",
+    "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
 ]
 
 [auto-image-prefix]
