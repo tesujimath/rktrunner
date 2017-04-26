@@ -30,13 +30,13 @@ type argsT struct {
 	cmdArgs []string
 }
 
-type execT struct {
+type commandT struct {
 	argv0 string
 	argv  []string
 	envv  []string
 }
 
-type commandT struct {
+type aliasT struct {
 	image string
 	exec  string
 }
@@ -45,11 +45,11 @@ type RunnerT struct {
 	config       configT
 	environ      map[string]string
 	environExtra map[string]string
-	alias        map[string]commandT
+	alias        map[string]aliasT
 	fragments    fragmentsT
 	args         argsT
 	appName      string
-	exec         execT
+	command      commandT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -163,7 +163,7 @@ $ rkt-run <options> <image> [<args>]
 	return nil
 }
 
-func formatAlias(key string, val commandT) string {
+func formatAlias(key string, val aliasT) string {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s = ", key)
 	if val.exec != "" {
@@ -173,7 +173,7 @@ func formatAlias(key string, val commandT) string {
 	return b.String()
 }
 
-func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *commandT) error {
+func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *aliasT) error {
 	var err error
 	dupVal, isDup := r.alias[key]
 	if isDup {
@@ -190,14 +190,14 @@ func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *command
 
 func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	var anyErr error
-	r.alias = make(map[string]commandT)
+	r.alias = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
-		err := r.registerAlias(w, warn, imageKey, &commandT{image: imageAlias.Image})
+		err := r.registerAlias(w, warn, imageKey, &aliasT{image: imageAlias.Image})
 		if err != nil && anyErr == nil {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
-			err = r.registerAlias(w, warn, exec, &commandT{image: imageAlias.Image, exec: exec})
+			err = r.registerAlias(w, warn, exec, &aliasT{image: imageAlias.Image, exec: exec})
 			if err != nil && anyErr == nil {
 				anyErr = err
 			}
@@ -262,7 +262,7 @@ func (r *RunnerT) buildEnviron() []string {
 	return result
 }
 
-func (r *RunnerT) resolveCommand() commandT {
+func (r *RunnerT) resolveCommand() aliasT {
 	cmd, ok := r.alias[r.args.image]
 	if !ok {
 		if *r.args.options.noImagePrefix {
@@ -393,9 +393,9 @@ func (r *RunnerT) buildExec() error {
 
 		argv = append(argv, r.args.cmdArgs...)
 	}
-	r.exec.argv0 = argv0
-	r.exec.argv = argv
-	r.exec.envv = r.buildEnviron()
+	r.command.argv0 = argv0
+	r.command.argv = argv
+	r.command.envv = r.buildEnviron()
 	return nil
 }
 
@@ -410,7 +410,7 @@ func (r *RunnerT) printExec(w io.Writer) {
 		fmt.Fprintf(w, "%s=%s ", key, r.environExtra[key])
 	}
 
-	fmt.Fprintf(w, "%s %s\n", r.exec.argv0, strings.Join(r.exec.argv[1:], " "))
+	fmt.Fprintf(w, "%s %s\n", r.command.argv0, strings.Join(r.command.argv[1:], " "))
 }
 
 func (r *RunnerT) Execute() error {
@@ -425,57 +425,69 @@ func (r *RunnerT) Execute() error {
 		}
 
 		if !*r.args.options.dryRun {
-			rundir := masterRunDir()
-			attachReadyPath := filepath.Join(rundir, attachReadyFile)
-			if r.runSlave() {
-				err := os.Mkdir(rundir, os.ModeDir|0755)
-				if err != nil {
-					return err
-				}
-			}
-
-			var attach *Attacher
-			if r.attachStdio() {
-				attach = NewAttacher(attachReadyPath, r.exec.envv)
-				attach.ByName(r.appName)
-			}
-
-			err := r.execAndWait()
-
-			if r.attachStdio() {
-				if err != nil {
-					attach.Abort()
-				} else {
-					// ignore errors on cleanup
-					warn := attach.Wait()
-					if warn != nil {
-						fmt.Fprintf(os.Stderr, "%v\n", warn)
-					}
-				}
-			}
-
-			if r.runSlave() {
-				// ignore errors on cleanup
-				warn := os.Remove(attachReadyPath)
-				if warn != nil {
-					fmt.Fprintf(os.Stderr, "%v\n", warn)
-				}
-				warn = os.Remove(rundir)
-				if warn != nil {
-					fmt.Fprintf(os.Stderr, "%v\n", warn)
-				}
-			}
-
-			return err
+			return r.exec()
 		}
 	}
 	return nil
 }
 
-// execAndWait runs the command, waiting for it to complete
-func (r *RunnerT) execAndWait() error {
-	cmd := exec.Command(r.exec.argv[0], r.exec.argv[1:]...)
-	cmd.Path = r.exec.argv0
-	cmd.Env = r.exec.envv
-	return cmd.Run()
+// exec runs the command, waiting for it to complete
+func (r *RunnerT) exec() error {
+	rundir := masterRunDir()
+	attachReadyPath := filepath.Join(rundir, attachReadyFile)
+	if r.runSlave() {
+		err := os.Mkdir(rundir, os.ModeDir|0755)
+		if err != nil {
+			return err
+		}
+	}
+
+	var attach *Attacher
+	if r.attachStdio() {
+		attach = NewAttacher(attachReadyPath, r.command.envv)
+		attach.ByName(r.appName)
+	}
+
+	cmd := exec.Command(r.command.argv[0], r.command.argv[1:]...)
+	cmd.Path = r.command.argv0
+	cmd.Env = r.command.envv
+	// We mustn't pass in stdin, as that would compete with
+	// our rkt attach.
+	// We choose not to pass in stdout, to avoid possible pollution
+	// of application output with rkt wrapper stuff.
+	// We pass in stderr, so that rkt errors are seen by the user.
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+
+	if r.attachStdio() {
+		if err != nil {
+			attach.Abort()
+		} else {
+			// ignore errors on cleanup
+			warn := attach.Wait()
+			if warn != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", warn)
+			}
+		}
+	}
+
+	if r.runSlave() {
+		// ignore errors on cleanup
+		os.Remove(attachReadyPath)
+		warn := os.Remove(rundir)
+		if warn != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", warn)
+		}
+	}
+
+	if err != nil {
+		_, isExitErr := err.(*exec.ExitError)
+		if isExitErr {
+			// don't report error to caller, as rkt run has already told user
+			// what's wrong
+			err = nil
+		}
+	}
+
+	return err
 }
