@@ -303,7 +303,7 @@ func generateUniqueAppName(image string) string {
 	}
 	firstColon := strings.Index(image[start:], ":")
 	if firstColon >= 0 {
-		basename = image[start:firstColon]
+		basename = image[start : firstColon+start]
 	} else {
 		basename = image[start:]
 	}
