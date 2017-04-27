@@ -28,7 +28,7 @@ sysadmin, perhaps based on the example which may be found in
 mkdir -p %{packagehome}
 mv %{name}-%{version}/* %{packagehome}
 mv %{packagehome}/{LICENSE,README.md,examples} .
-GOPATH=%{gopath} go get github.com/BurntSushi/toml github.com/droundy/goopt
+GOPATH=%{gopath} go get github.com/BurntSushi/toml github.com/droundy/goopt github.com/fsnotify/fsnotify
 
 %define debug_package %{nil}
 
