@@ -103,7 +103,7 @@ func findUuid(appName string) (uuid string, err error) {
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if fields[1] == appName {
+		if len(fields) >= 2 && fields[1] == appName {
 			uuid = fields[0]
 		}
 	}
