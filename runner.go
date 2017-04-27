@@ -450,9 +450,9 @@ func (r *RunnerT) exec() error {
 		attach.ByName(r.appName)
 	}
 
-	if *r.args.options.interactive {
-		// for interactive mode, need to ensure the tty works,
-		// and this seems to be that way:
+	if !r.attachStdio() {
+		// not attaching stdio, so keep it simple
+		// (and this is essential in interactive mode, for tty)
 		err = syscall.Exec(r.command.argv0, r.command.argv, r.command.envv)
 	} else {
 		cmd := exec.Command(r.command.argv[0], r.command.argv[1:]...)
