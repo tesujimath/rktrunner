@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 type optionsT struct {
@@ -433,10 +434,11 @@ func (r *RunnerT) Execute() error {
 
 // exec runs the command, waiting for it to complete
 func (r *RunnerT) exec() error {
+	var err error
 	rundir := masterRunDir()
 	attachReadyPath := filepath.Join(rundir, attachReadyFile)
 	if r.runSlave() {
-		err := os.Mkdir(rundir, os.ModeDir|0755)
+		err = os.Mkdir(rundir, os.ModeDir|0755)
 		if err != nil {
 			return err
 		}
@@ -448,16 +450,22 @@ func (r *RunnerT) exec() error {
 		attach.ByName(r.appName)
 	}
 
-	cmd := exec.Command(r.command.argv[0], r.command.argv[1:]...)
-	cmd.Path = r.command.argv0
-	cmd.Env = r.command.envv
-	// We mustn't pass in stdin, as that would compete with
-	// our rkt attach.
-	// We choose not to pass in stdout, to avoid possible pollution
-	// of application output with rkt wrapper stuff.
-	// We pass in stderr, so that rkt errors are seen by the user.
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	if *r.args.options.interactive {
+		// for interactive mode, need to ensure the tty works,
+		// and this seems to be that way:
+		err = syscall.Exec(r.command.argv0, r.command.argv, r.command.envv)
+	} else {
+		cmd := exec.Command(r.command.argv[0], r.command.argv[1:]...)
+		cmd.Path = r.command.argv0
+		cmd.Env = r.command.envv
+		// We mustn't pass in stdin, as that would compete with
+		// our rkt attach.
+		// We choose not to pass in stdout, to avoid possible pollution
+		// of application output with rkt wrapper stuff.
+		// We pass in stderr, so that rkt errors are seen by the user.
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+	}
 
 	if r.attachStdio() {
 		if err != nil {
