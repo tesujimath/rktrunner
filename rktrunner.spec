@@ -9,6 +9,7 @@ URL:            https://github.com/tesujimath/rktrunner
 # pesky github, download URL does not end in the filename they give you
 #Source0:        https://github.com/tesujimath/rktrunner/archive/v%{version}.tar.gz
 Source0:        rktrunner-%{version}.tar.gz
+Source1:        golang.org.x.sys.unix.tgz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 %description
@@ -28,6 +29,7 @@ sysadmin, perhaps based on the example which may be found in
 mkdir -p %{packagehome}
 mv %{name}-%{version}/* %{packagehome}
 mv %{packagehome}/{LICENSE,README.md,examples} .
+tar xaf %SOURCE1 -C %{gopath}/src
 GOPATH=%{gopath} go get github.com/BurntSushi/toml github.com/droundy/goopt github.com/fsnotify/fsnotify
 
 %define debug_package %{nil}
