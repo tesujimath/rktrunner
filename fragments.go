@@ -38,7 +38,9 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 		if err != nil {
 			return err
 		}
-		f.Environment[envKey] = s
+		if s != "" {
+			f.Environment[envKey] = s
+		}
 	}
 
 	f.Options = make(map[string][]string)
