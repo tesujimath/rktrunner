@@ -7,6 +7,7 @@ default-interactive-cmd = "sh"
 
 [options]
 general = ["--insecure-options=image"]
+fetch = ["--pull-policy=new"]
 run = [
     "--net=host",
     "--set-env=HOME=/home/{{.Username}}",

@@ -13,14 +13,16 @@ import (
 type Attacher struct {
 	donePath        string
 	environ         []string
+	verbose         bool
 	abort           chan bool
 	rktAttachStatus chan error
 }
 
-func NewAttacher(donePath string, environ []string) *Attacher {
+func NewAttacher(donePath string, environ []string, verbose bool) *Attacher {
 	return &Attacher{
 		donePath:        donePath,
 		environ:         environ,
+		verbose:         verbose,
 		abort:           make(chan bool),
 		rktAttachStatus: make(chan error),
 	}
@@ -48,7 +50,7 @@ func (a *Attacher) run(appName string) {
 	var err error
 loop:
 	for uuid == "" && err == nil {
-		uuid, err = findUuid(appName)
+		uuid, err = findUuid(appName, "running")
 		if err != nil {
 			attacherWarn(err)
 		}
@@ -85,9 +87,9 @@ loop:
 	f.Close()
 }
 
-// findUuid returns the uuid for the named container,
-// or an empty string if it isn't found
-func findUuid(appName string) (uuid string, err error) {
+// findUuid returns the uuid for the named app in the given state,
+// or an empty string if it isn't found (or isn't in that state)
+func findUuid(appName, state string) (uuid string, err error) {
 	cmd := exec.Command("rkt", "list", "--full", "--no-legend")
 	var stdout io.ReadCloser
 	stdout, err = cmd.StdoutPipe()
@@ -103,7 +105,7 @@ func findUuid(appName string) (uuid string, err error) {
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 2 && fields[1] == appName {
+		if len(fields) >= 5 && fields[1] == appName && fields[4] == state {
 			uuid = fields[0]
 		}
 	}
@@ -118,7 +120,7 @@ func findUuid(appName string) (uuid string, err error) {
 }
 
 // attachByUuid attaches to a container by UUID.
-// Any error is just printed, as this must be run asynchronously.
+// Any error is returned on the rktAttachStatus channel.
 func (a *Attacher) attachByUuid(uuid string) {
 	args := []string{"rkt", "attach", "--mode", "stdin,stdout,stderr", uuid}
 	cmd := exec.Command(args[0], args[1:]...)
@@ -126,7 +128,14 @@ func (a *Attacher) attachByUuid(uuid string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if a.verbose {
+			fmt.Fprintf(os.Stderr, "%s (pid %d)\n", strings.Join(args, " "), cmd.Process.Pid)
+		}
+
+		err = cmd.Wait()
+	}
 	if err != nil {
 		a.rktAttachStatus <- err
 	}

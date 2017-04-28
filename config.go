@@ -31,6 +31,7 @@ type ImageAliasT struct {
 
 // valid options
 const GeneralOptions = "general"
+const FetchOptions = "fetch"
 const RunOptions = "run"
 const ImageOptions = "image"
 
@@ -66,6 +67,7 @@ func GetConfig(path string, c *configT) error {
 	type validOptionsT map[string]bool
 	validOptions := validOptionsT{
 		GeneralOptions: true,
+		FetchOptions:   true,
 		RunOptions:     true,
 		ImageOptions:   true,
 	}

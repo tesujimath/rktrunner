@@ -50,7 +50,10 @@ type RunnerT struct {
 	fragments    fragmentsT
 	args         argsT
 	appName      string
-	command      commandT
+	image        string
+	exec         string
+	fetchCommand commandT
+	runCommand   commandT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -95,7 +98,15 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	case *r.args.options.listAlias:
 		// do nothing for now
 	default:
-		err = r.buildExec()
+		err = r.resolveImage()
+		if err != nil {
+			return nil, fmt.Errorf("bad usage: %v", err)
+		}
+		err = r.buildFetchCommand()
+		if err != nil {
+			return nil, fmt.Errorf("bad usage: %v", err)
+		}
+		err = r.buildRunCommand()
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
 		}
@@ -263,16 +274,42 @@ func (r *RunnerT) buildEnviron() []string {
 	return result
 }
 
-func (r *RunnerT) resolveCommand() aliasT {
-	cmd, ok := r.alias[r.args.image]
-	if !ok {
+func (r *RunnerT) resolveImage() error {
+	if r.args.image == "" {
+		return fmt.Errorf("missing image")
+	} else if r.args.image[0] == '-' {
+		return fmt.Errorf("image cannot start with -")
+	}
+
+	alias, ok := r.alias[r.args.image]
+	if ok {
+		r.image = alias.image
+		r.exec = alias.exec
+	} else {
 		if *r.args.options.noImagePrefix {
-			cmd.image = r.args.image
+			r.image = r.args.image
 		} else {
-			cmd.image = r.autoPrefix(r.args.image)
+			r.image = r.autoPrefix(r.args.image)
 		}
 	}
-	return cmd
+
+	switch {
+	case r.exec != "":
+		if *r.args.options.exec != "" {
+			return fmt.Errorf("cannot specify executable with alias")
+		}
+
+	case *r.args.options.exec != "":
+		r.exec = *r.args.options.exec
+
+	case *r.args.options.interactive && r.config.DefaultInteractiveCmd != "":
+		r.exec = r.config.DefaultInteractiveCmd
+	}
+	if r.exec != "" && r.exec[0] == '-' {
+		return fmt.Errorf("command cannot start with -")
+	}
+
+	return nil
 }
 
 func (r *RunnerT) formatVolumes() []string {
@@ -311,7 +348,24 @@ func generateUniqueAppName(image string) string {
 	return fmt.Sprintf("%s-%d", basename, os.Getpid())
 }
 
-func (r *RunnerT) buildExec() error {
+func (r *RunnerT) buildFetchCommand() error {
+	argv0 := r.config.Rkt
+	argv := make([]string, 1)
+	argv[0] = filepath.Base(argv0)
+	argv = append(argv, r.fragments.Options[GeneralOptions]...)
+	argv = append(argv, "fetch")
+
+	argv = append(argv, r.fragments.Options[FetchOptions]...)
+
+	argv = append(argv, r.image)
+
+	r.fetchCommand.argv0 = argv0
+	r.fetchCommand.argv = argv
+	r.fetchCommand.envv = os.Environ()
+	return nil
+}
+
+func (r *RunnerT) buildRunCommand() error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
 	argv[0] = filepath.Base(argv0)
@@ -328,16 +382,9 @@ func (r *RunnerT) buildExec() error {
 	}
 
 	argv = append(argv, r.formatVolumes()...)
+	argv = append(argv, r.image)
 
-	if r.args.image == "" {
-		return fmt.Errorf("missing image")
-	} else if r.args.image[0] == '-' {
-		return fmt.Errorf("image cannot start with -")
-	}
-	cmd := r.resolveCommand()
-	argv = append(argv, cmd.image)
-
-	r.appName = generateUniqueAppName(cmd.image)
+	r.appName = generateUniqueAppName(r.image)
 	argv = append(argv, "--name", r.appName)
 
 	if r.attachStdio() {
@@ -346,22 +393,6 @@ func (r *RunnerT) buildExec() error {
 
 	argv = append(argv, r.formatMounts()...)
 	argv = append(argv, r.fragments.Options[ImageOptions]...)
-
-	switch {
-	case cmd.exec != "":
-		if *r.args.options.exec != "" {
-			return fmt.Errorf("cannot specify executable with alias")
-		}
-
-	case *r.args.options.exec != "":
-		cmd.exec = *r.args.options.exec
-
-	case *r.args.options.interactive && r.config.DefaultInteractiveCmd != "":
-		cmd.exec = r.config.DefaultInteractiveCmd
-	}
-	if cmd.exec != "" && cmd.exec[0] == '-' {
-		return fmt.Errorf("command cannot start with -")
-	}
 
 	if r.runSlave() {
 		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
@@ -375,12 +406,12 @@ func (r *RunnerT) buildExec() error {
 			}
 			argv = append(argv, "--cwd", cwd)
 		}
-		if cmd.exec != "" {
-			argv = append(argv, cmd.exec)
+		if r.exec != "" {
+			argv = append(argv, r.exec)
 		}
 	} else {
-		if cmd.exec != "" {
-			argv = append(argv, "--exec", cmd.exec, "--")
+		if r.exec != "" {
+			argv = append(argv, "--exec", r.exec, "--")
 		}
 	}
 
@@ -394,13 +425,17 @@ func (r *RunnerT) buildExec() error {
 
 		argv = append(argv, r.args.cmdArgs...)
 	}
-	r.command.argv0 = argv0
-	r.command.argv = argv
-	r.command.envv = r.buildEnviron()
+	r.runCommand.argv0 = argv0
+	r.runCommand.argv = argv
+	r.runCommand.envv = r.buildEnviron()
 	return nil
 }
 
-func (r *RunnerT) printExec(w io.Writer) {
+func (r *RunnerT) printFetchCommand(w io.Writer) {
+	fmt.Fprintf(w, "%s %s\n", r.fetchCommand.argv0, strings.Join(r.fetchCommand.argv[1:], " "))
+}
+
+func (r *RunnerT) printRunCommand(w io.Writer, pid int) {
 	// get keys in order
 	var keys []string
 	for key := range r.environExtra {
@@ -411,30 +446,50 @@ func (r *RunnerT) printExec(w io.Writer) {
 		fmt.Fprintf(w, "%s=%s ", key, r.environExtra[key])
 	}
 
-	fmt.Fprintf(w, "%s %s\n", r.command.argv0, strings.Join(r.command.argv[1:], " "))
+	fmt.Fprintf(w, "%s %s", r.runCommand.argv0, strings.Join(r.runCommand.argv[1:], " "))
+	if pid > 0 {
+		fmt.Fprintf(w, " (pid %d)\n", pid)
+	} else {
+		fmt.Fprintf(w, "\n")
+	}
 }
 
 func (r *RunnerT) Execute() error {
 	// different functionality depending on options, see NewRunner()
 	switch {
 	case *r.args.options.listAlias:
-		r.printAliases(os.Stdout)
+		r.printAliases(os.Stderr)
 
 	default:
-		if *r.args.options.verbose {
-			r.printExec(os.Stdout)
-		}
-
 		if !*r.args.options.dryRun {
-			return r.exec()
+			return r.fetchAndRun()
 		}
 	}
 	return nil
 }
 
-// exec runs the command, waiting for it to complete
-func (r *RunnerT) exec() error {
+// fetchAndRun fetches the image, and runs the command, waiting for it to complete
+func (r *RunnerT) fetchAndRun() error {
 	var err error
+
+	// separate fetch is not working reliably, so hide it
+	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
+	if separateFetch {
+		if *r.args.options.verbose {
+			r.printFetchCommand(os.Stderr)
+		}
+
+		fetchCmd := exec.Command(r.fetchCommand.argv[0], r.fetchCommand.argv[1:]...)
+		fetchCmd.Path = r.fetchCommand.argv0
+		fetchCmd.Env = r.fetchCommand.envv
+		// for progress updates:
+		fetchCmd.Stderr = os.Stderr
+		err = fetchCmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+
 	rundir := masterRunDir()
 	attachReadyPath := filepath.Join(rundir, attachReadyFile)
 	if r.runSlave() {
@@ -446,25 +501,35 @@ func (r *RunnerT) exec() error {
 
 	var attach *Attacher
 	if r.attachStdio() {
-		attach = NewAttacher(attachReadyPath, r.command.envv)
+		attach = NewAttacher(attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
 		attach.ByName(r.appName)
 	}
 
 	if !r.attachStdio() {
 		// not attaching stdio, so keep it simple
 		// (and this is essential in interactive mode, for tty)
-		err = syscall.Exec(r.command.argv0, r.command.argv, r.command.envv)
+		if *r.args.options.verbose {
+			r.printRunCommand(os.Stderr, 0)
+		}
+		err = syscall.Exec(r.runCommand.argv0, r.runCommand.argv, r.runCommand.envv)
 	} else {
-		cmd := exec.Command(r.command.argv[0], r.command.argv[1:]...)
-		cmd.Path = r.command.argv0
-		cmd.Env = r.command.envv
+		runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
+		runCmd.Path = r.runCommand.argv0
+		runCmd.Env = r.runCommand.envv
 		// We mustn't pass in stdin, as that would compete with
 		// our rkt attach.
 		// We choose not to pass in stdout, to avoid possible pollution
 		// of application output with rkt wrapper stuff.
 		// We pass in stderr, so that rkt errors are seen by the user.
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		runCmd.Stderr = os.Stderr
+		err = runCmd.Start()
+		if err == nil {
+			if *r.args.options.verbose {
+				r.printRunCommand(os.Stderr, runCmd.Process.Pid)
+			}
+
+			err = runCmd.Wait()
+		}
 	}
 
 	if r.attachStdio() {
