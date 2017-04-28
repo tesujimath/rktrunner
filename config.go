@@ -14,6 +14,7 @@ type configT struct {
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
+	Environment           map[string]string `toml:"environment"`
 	Options               map[string][]string
 	Volume                map[string]VolumeT
 	Alias                 map[string]ImageAliasT

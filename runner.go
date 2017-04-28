@@ -18,6 +18,7 @@ type optionsT struct {
 	config        *string
 	exec          *string
 	setenvs       *[]string
+	printEnv      *bool
 	interactive   *bool
 	verbose       *bool
 	dryRun        *bool
@@ -139,6 +140,7 @@ func (r *RunnerT) parseArgs() error {
 	r.args.options.config = goopt.String([]string{"--config"}, "", "alternative config file, requires --dry-run")
 	r.args.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
 	r.args.options.setenvs = goopt.Strings([]string{"--set-env"}, "", "environment variable")
+	r.args.options.printEnv = goopt.Flag([]string{"--print-env"}, []string{}, "print environment variables passed into container", "")
 	r.args.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
 	r.args.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
 	r.args.options.dryRun = goopt.Flag([]string{"--dry-run"}, []string{}, "don't execute anything", "")
@@ -220,7 +222,7 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 
 func (r *RunnerT) printAliases(w io.Writer) {
 	// get keys in order
-	var keys []string
+	keys := make([]string, 0, len(r.alias))
 	for key := range r.alias {
 		keys = append(keys, key)
 	}
@@ -272,6 +274,27 @@ func (r *RunnerT) buildEnviron() []string {
 		result = append(result, fmt.Sprintf("%s=%s", key, val))
 	}
 	return result
+}
+
+func (r *RunnerT) createEnvFile(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r.fragments.printEnvironment(f)
+	if *r.args.options.printEnv {
+		r.fragments.printEnvironment(os.Stderr)
+	}
+
+	for _, setenv := range *r.args.options.setenvs {
+		fmt.Fprintf(f, "%s\n", setenv)
+		if *r.args.options.printEnv {
+			fmt.Fprintf(os.Stderr, "%s\n", setenv)
+		}
+	}
+	return nil
 }
 
 func (r *RunnerT) resolveImage() error {
@@ -375,11 +398,8 @@ func (r *RunnerT) buildRunCommand() error {
 		argv = append(argv, "--interactive")
 	}
 
+	argv = append(argv, "--set-env-file", envFilePath())
 	argv = append(argv, r.fragments.Options[RunOptions]...)
-
-	for _, setenv := range *r.args.options.setenvs {
-		argv = append(argv, fmt.Sprintf("--set-env=%s", setenv))
-	}
 
 	argv = append(argv, r.formatVolumes()...)
 	argv = append(argv, r.image)
@@ -437,7 +457,7 @@ func (r *RunnerT) printFetchCommand(w io.Writer) {
 
 func (r *RunnerT) printRunCommand(w io.Writer, pid int) {
 	// get keys in order
-	var keys []string
+	keys := make([]string, 0, len(r.environExtra))
 	for key := range r.environExtra {
 		keys = append(keys, key)
 	}
@@ -497,12 +517,26 @@ func (r *RunnerT) fetchAndRun() error {
 		if err != nil {
 			return err
 		}
+		defer func() {
+			warn := os.Remove(rundir)
+			if warn != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", warn)
+			}
+		}()
 	}
+
+	envFile := envFilePath()
+	err = r.createEnvFile(envFile)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(envFile)
 
 	var attach *Attacher
 	if r.attachStdio() {
 		attach = NewAttacher(attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
 		attach.ByName(r.appName)
+		defer os.Remove(attachReadyPath)
 	}
 
 	if !r.attachStdio() {
@@ -541,15 +575,6 @@ func (r *RunnerT) fetchAndRun() error {
 			if warn != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", warn)
 			}
-		}
-	}
-
-	if r.runSlave() {
-		// ignore errors on cleanup
-		os.Remove(attachReadyPath)
-		warn := os.Remove(rundir)
-		if warn != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", warn)
 		}
 	}
 

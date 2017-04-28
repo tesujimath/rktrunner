@@ -3,6 +3,7 @@ package rktrunner
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 const slaveBinVolume = "rktrunner-bin"
@@ -15,4 +16,8 @@ const attachReadyFile = "attached"
 
 func masterRunDir() string {
 	return fmt.Sprintf("/tmp/rktrunner%d", os.Getpid())
+}
+
+func envFilePath() string {
+	return filepath.Join(masterRunDir(), "env")
 }

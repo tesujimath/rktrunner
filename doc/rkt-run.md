@@ -22,6 +22,9 @@ command to run instead of image default
 `--set-env` *name=value*
 set environment variable in container
 
+`--print-env`
+print environment variables passed into container
+
 `-i`, `--interactive`
 run image interactively
 

@@ -14,6 +14,12 @@
 
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
+## environment
+
+[environment]
+
+*name* `=` *value* `# environment variable for container`
+
 ## options
 
 [options]
