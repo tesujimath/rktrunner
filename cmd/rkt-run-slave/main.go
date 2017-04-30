@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/droundy/goopt"
-	"github.com/fsnotify/fsnotify"
+	"github.com/rjeczalik/notify"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,27 +22,24 @@ func exists(path string) bool {
 
 // await waits until the path appears
 func await(path string) error {
-	watcher, err := fsnotify.NewWatcher()
+	awaitDirEvents := make(chan notify.EventInfo, 2)
+	err := notify.Watch(filepath.Dir(path), awaitDirEvents, notify.InCloseWrite)
 	if err != nil {
 		return err
 	}
-	defer watcher.Close()
+	defer notify.Stop(awaitDirEvents)
 
-	err = watcher.Add(filepath.Dir(path))
-
-	// check after creating watcher, to avoid race
+	// check after creating awaitDirEvents, to avoid race
 	if exists(path) {
 		return nil
 	}
 
 	for {
-		select {
-		case _ = <-watcher.Events:
+		switch ei := <-awaitDirEvents; ei.Event() {
+		case notify.InCloseWrite:
 			if exists(path) {
 				return nil
 			}
-		case err := <-watcher.Errors:
-			return err
 		}
 	}
 	// unreached
