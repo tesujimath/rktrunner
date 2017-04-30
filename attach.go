@@ -1,16 +1,20 @@
 package rktrunner
 
 import (
-	"bufio"
 	"fmt"
+	"github.com/rjeczalik/notify"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type Attacher struct {
+	uuidPath        string
+	uuidDirEvents   chan notify.EventInfo
 	donePath        string
 	environ         []string
 	verbose         bool
@@ -18,68 +22,84 @@ type Attacher struct {
 	rktAttachStatus chan error
 }
 
-func NewAttacher(donePath string, environ []string, verbose bool) *Attacher {
+// NewAttacher creates an Attacher, after which if done with no error,
+// the caller *must* call Wait() or Abort().
+func NewAttacher(uuidPath, donePath string, environ []string, verbose bool) (*Attacher, error) {
+	uuidDirEvents := make(chan notify.EventInfo, 2)
+	err := notify.Watch(filepath.Dir(uuidPath), uuidDirEvents, notify.InCloseWrite)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Attacher{
+		uuidPath:        uuidPath,
+		uuidDirEvents:   uuidDirEvents,
 		donePath:        donePath,
 		environ:         environ,
 		verbose:         verbose,
 		abort:           make(chan bool),
 		rktAttachStatus: make(chan error),
-	}
+	}, nil
 }
 
 func attacherWarn(err error) {
 	fmt.Fprintf(os.Stderr, "rkt-run: warning: attach failure %v\n", err)
 }
 
-func (a *Attacher) ByName(appName string) {
-	go a.run(appName)
-}
-
 func (a *Attacher) Abort() {
+	notify.Stop(a.uuidDirEvents)
 	close(a.abort)
 }
 
 func (a *Attacher) Wait() error {
+	notify.Stop(a.uuidDirEvents)
 	err := <-a.rktAttachStatus
 	return err
 }
 
-func (a *Attacher) run(appName string) {
+func (a *Attacher) Attach() {
 	var uuid string
 	var err error
 loop:
 	for uuid == "" && err == nil {
-		uuid, err = findUuid(appName, "running")
-		if err != nil {
-			attacherWarn(err)
-		}
-
-		if uuid == "" {
-			// wait for a while
-			timeout := time.After(time.Duration(time.Second))
-			select {
-			case _, ok := <-a.abort:
-				if !ok {
-					attacherWarn(fmt.Errorf("abort"))
+		// wait for the uuid file, or an abort event
+		select {
+		case _, ok := <-a.abort:
+			if !ok {
+				attacherWarn(fmt.Errorf("abort"))
+				break loop
+			}
+		case ei := <-a.uuidDirEvents:
+			switch ei.Event() {
+			case notify.InCloseWrite:
+				var bytes []byte
+				bytes, err = ioutil.ReadFile(a.uuidPath)
+				if err != nil {
 					break loop
 				}
-			case <-timeout:
-				// go around again
+				uuid = string(bytes)
 			}
 		}
 	}
 
 	if uuid != "" {
-		go a.attachByUuid(uuid)
+		err = a.rktStatusWaitReady(uuid)
+		if err == nil {
+			go a.rktAttach(uuid)
+
+			// Give the asynchronous rkt attach a chance to do its thing.
+			// This is rather unsatisfactory.
+			time.Sleep(time.Duration(1000 * time.Millisecond))
+		}
 	}
 
-	// Give the asynchronous rkt attach a chance to do its thing.
-	// This is rather unsatisfactory.
-	time.Sleep(time.Duration(1000 * time.Millisecond))
+	if err != nil {
+		attacherWarn(err)
+	}
 
 	// notify slave that attachment is ready
-	f, err := os.Create(a.donePath)
+	var f io.ReadCloser
+	f, err = os.Create(a.donePath)
 	if err != nil {
 		attacherWarn(err)
 		return
@@ -87,41 +107,20 @@ loop:
 	f.Close()
 }
 
-// findUuid returns the uuid for the named app in the given state,
-// or an empty string if it isn't found (or isn't in that state)
-func findUuid(appName, state string) (uuid string, err error) {
-	cmd := exec.Command("rkt", "list", "--full", "--no-legend")
-	var stdout io.ReadCloser
-	stdout, err = cmd.StdoutPipe()
-	if err != nil {
-		return
+// rktStatusWaitReady waits for the container to be ready.
+// Any error is returned on the rktAttachStatus channel.
+func (a *Attacher) rktStatusWaitReady(uuid string) error {
+	args := []string{"rkt", "status", "--wait-ready", uuid}
+	cmd := exec.Command(args[0], args[1:]...)
+	if a.verbose {
+		fmt.Fprintf(os.Stderr, "%s\n", strings.Join(args, " "))
 	}
-
-	err = cmd.Start()
-	if err != nil {
-		return
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 5 && fields[1] == appName && fields[4] == state {
-			uuid = fields[0]
-		}
-	}
-
-	scannerErr := scanner.Err()
-	err = cmd.Wait()
-	// ensure we return scanner error if something went wrong
-	if err == nil && scannerErr != nil {
-		err = scannerErr
-	}
-	return
+	return cmd.Run()
 }
 
-// attachByUuid attaches to a container by UUID.
+// rktAttach attaches to a container by UUID.
 // Any error is returned on the rktAttachStatus channel.
-func (a *Attacher) attachByUuid(uuid string) {
+func (a *Attacher) rktAttach(uuid string) {
 	args := []string{"rkt", "attach", "--mode", "stdin,stdout,stderr", uuid}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = a.environ

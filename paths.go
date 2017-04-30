@@ -21,3 +21,7 @@ func masterRunDir() string {
 func envFilePath() string {
 	return filepath.Join(masterRunDir(), "env")
 }
+
+func uuidFilePath() string {
+	return filepath.Join(masterRunDir(), "uuid")
+}

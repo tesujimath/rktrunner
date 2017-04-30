@@ -50,7 +50,6 @@ type RunnerT struct {
 	alias        map[string]aliasT
 	fragments    fragmentsT
 	args         argsT
-	appName      string
 	image        string
 	exec         string
 	fetchCommand commandT
@@ -355,22 +354,6 @@ func (r *RunnerT) formatMounts() []string {
 	return mounts
 }
 
-func generateUniqueAppName(image string) string {
-	var start int
-	var basename string
-	lastSlash := strings.LastIndex(image, "/")
-	if lastSlash >= 0 {
-		start = lastSlash + 1
-	}
-	firstColon := strings.Index(image[start:], ":")
-	if firstColon >= 0 {
-		basename = image[start : firstColon+start]
-	} else {
-		basename = image[start:]
-	}
-	return fmt.Sprintf("%s-%d", basename, os.Getpid())
-}
-
 func (r *RunnerT) buildFetchCommand() error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
@@ -398,14 +381,12 @@ func (r *RunnerT) buildRunCommand() error {
 		argv = append(argv, "--interactive")
 	}
 
+	argv = append(argv, "--uuid-file-save", uuidFilePath())
 	argv = append(argv, "--set-env-file", envFilePath())
 	argv = append(argv, r.fragments.Options[RunOptions]...)
 
 	argv = append(argv, r.formatVolumes()...)
 	argv = append(argv, r.image)
-
-	r.appName = generateUniqueAppName(r.image)
-	argv = append(argv, "--name", r.appName)
 
 	if r.attachStdio() {
 		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
@@ -511,7 +492,6 @@ func (r *RunnerT) fetchAndRun() error {
 	}
 
 	rundir := masterRunDir()
-	attachReadyPath := filepath.Join(rundir, attachReadyFile)
 	if r.runSlave() {
 		err = os.Mkdir(rundir, os.ModeDir|0755)
 		if err != nil {
@@ -525,17 +505,24 @@ func (r *RunnerT) fetchAndRun() error {
 		}()
 	}
 
-	envFile := envFilePath()
-	err = r.createEnvFile(envFile)
+	envPath := envFilePath()
+	err = r.createEnvFile(envPath)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(envFile)
+	defer os.Remove(envPath)
 
+	uuidPath := uuidFilePath()
+	defer os.Remove(uuidPath)
+
+	attachReadyPath := filepath.Join(rundir, attachReadyFile)
 	var attach *Attacher
 	if r.attachStdio() {
-		attach = NewAttacher(attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
-		attach.ByName(r.appName)
+		attach, err = NewAttacher(uuidPath, attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
+		if err != nil {
+			return err
+		}
+		go attach.Attach()
 		defer os.Remove(attachReadyPath)
 	}
 
