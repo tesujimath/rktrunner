@@ -478,7 +478,7 @@ func (r *RunnerT) Execute() error {
 	// different functionality depending on options, see NewRunner()
 	switch {
 	case *r.args.options.listAlias:
-		r.printAliases(os.Stderr)
+		r.printAliases(os.Stdout)
 
 	default:
 		if !*r.args.options.dryRun {
