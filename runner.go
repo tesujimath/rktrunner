@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 type optionsT struct {
@@ -526,30 +525,24 @@ func (r *RunnerT) fetchAndRun() error {
 		defer os.Remove(attachReadyPath)
 	}
 
+	runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
+	runCmd.Path = r.runCommand.argv0
+	runCmd.Env = r.runCommand.envv
 	if !r.attachStdio() {
-		// not attaching stdio, so keep it simple
-		// (and this is essential in interactive mode, for tty)
+		runCmd.Stdin = os.Stdin
+		runCmd.Stdout = os.Stdout
+	}
+	runCmd.Stderr = os.Stderr
+	err = runCmd.Start()
+	if err == nil {
+		if *r.args.options.verbose {
+			r.printRunCommand(os.Stderr, runCmd.Process.Pid)
+		}
+
+		err = runCmd.Wait()
+	} else {
 		if *r.args.options.verbose {
 			r.printRunCommand(os.Stderr, 0)
-		}
-		err = syscall.Exec(r.runCommand.argv0, r.runCommand.argv, r.runCommand.envv)
-	} else {
-		runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
-		runCmd.Path = r.runCommand.argv0
-		runCmd.Env = r.runCommand.envv
-		// We mustn't pass in stdin, as that would compete with
-		// our rkt attach.
-		// We choose not to pass in stdout, to avoid possible pollution
-		// of application output with rkt wrapper stuff.
-		// We pass in stderr, so that rkt errors are seen by the user.
-		runCmd.Stderr = os.Stderr
-		err = runCmd.Start()
-		if err == nil {
-			if *r.args.options.verbose {
-				r.printRunCommand(os.Stderr, runCmd.Process.Pid)
-			}
-
-			err = runCmd.Wait()
 		}
 	}
 
