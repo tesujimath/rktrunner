@@ -2,7 +2,6 @@ rkt = "/usr/bin/rkt"
 attach-stdio = true
 preserve-cwd = true
 exec-slave-dir = "/usr/libexec/rktrunner"
-#exec-slave-dir = "/home/guestsi/go/bin"
 default-interactive-cmd = "sh"
 
 [environment]
