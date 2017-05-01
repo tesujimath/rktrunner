@@ -72,13 +72,16 @@ preserve-cwd = true
 exec-slave-dir = "/usr/libexec/rktrunner"
 default-interactive-cmd = "sh"
 
+[environment]
+# these are passed in a file, not on the command line
+HOME = "/home/{{.Username}}"
+http_proxy = "{{.http_proxy}}"
+https_proxy = "{{.https_proxy}}"
+
 [options]
 general = ["--insecure-options=image"]
 run = [
     "--net=host",
-    "--set-env=HOME=/home/{{.Username}}",
-    "--set-env=http_proxy={{.http_proxy}}",
-    "--set-env=https_proxy={{.https_proxy}}",
 ]
 image = [
     "--user={{.Uid}}",
