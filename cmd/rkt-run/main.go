@@ -26,6 +26,12 @@ func main() {
 
 	err = r.Execute()
 	if err != nil {
-		die("failed: %v", err)
+		switch err {
+		case rktrunner.ErrRktRunFailed:
+			// don't output message, since rkt run already did
+			os.Exit(1)
+		default:
+			die("failed: %v", err)
+		}
 	}
 }

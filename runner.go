@@ -2,6 +2,7 @@ package rktrunner
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/droundy/goopt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 )
+
+var ErrRktRunFailed = errors.New("rkt run failed")
 
 type optionsT struct {
 	config        *string
@@ -541,6 +544,14 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 
 		err = runCmd.Wait()
+
+		// ensure we don't print an error message if rkt run already did
+		if err != nil {
+			_, isExitErr := err.(*exec.ExitError)
+			if isExitErr {
+				err = ErrRktRunFailed
+			}
+		}
 	} else {
 		if *r.args.options.verbose {
 			r.printRunCommand(os.Stderr, 0)
@@ -556,15 +567,6 @@ func (r *RunnerT) fetchAndRun() error {
 			if warn != nil {
 				fmt.Fprintf(os.Stderr, "%v\n", warn)
 			}
-		}
-	}
-
-	if err != nil {
-		_, isExitErr := err.(*exec.ExitError)
-		if isExitErr {
-			// don't report error to caller, as rkt run has already told user
-			// what's wrong
-			err = nil
 		}
 	}
 
