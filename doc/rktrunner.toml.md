@@ -117,40 +117,17 @@ volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
 # which don't have a default executable.
 #
 
-[alias.bbmap_]
-image = "quay.io/biocontainers/bbmap:37.02--0"
-exec = ["bbmap.sh"]
-
 [alias.blast_]
 image = "quay.io/biocontainers/blast:2.6.0--boost1.61_0"
 exec = ["blastn","blastp","blastx","tblastn","tblastx"]
-
-[alias.canu_]
-image = "quay.io/biocontainers/canu:1.4--1"
-exec = ["canu"]
 
 [alias.julia_]
 image = "docker://julia"
 exec = ["julia"]
 
-[alias.mafft_]
-image = "quay.io/biocontainers/mafft:7.305--0"
-exec = ["mafft"]
-
-[alias.qiime_]
-image = "quay.io/biocontainers/qiime:1.9.1--py27_0"
-
-[alias.ruby]
+[alias.ruby_]
 image = "docker://ruby"
-
-[alias.spades_]
-image = "quay.io/biocontainers/spades:3.10.1--py35_0"
-
-[alias.stacks_]
-image = "quay.io/biocontainers/stacks:1.44--0"
-
-[alias.trimmomatic_]
-image = "quay.io/biocontainers/trimmomatic:0.36--3"
+exec = ["ruby", "irb"]
 ```
 
 # SEE ALSO
