@@ -60,6 +60,7 @@ func (a *Attacher) Wait() error {
 func (a *Attacher) Attach() {
 	var uuid string
 	var err error
+	attachAttempted := false
 loop:
 	for uuid == "" && err == nil {
 		// wait for the uuid file, or an abort event
@@ -86,6 +87,7 @@ loop:
 		err = a.rktStatusWaitReady(uuid)
 		if err == nil {
 			go a.rktAttach(uuid)
+			attachAttempted = true
 
 			// Give the asynchronous rkt attach a chance to do its thing.
 			// This is rather unsatisfactory.
@@ -98,13 +100,15 @@ loop:
 	}
 
 	// notify slave that attachment is ready
-	var f io.ReadCloser
-	f, err = os.Create(a.donePath)
-	if err != nil {
-		attacherWarn(err)
-		return
+	if attachAttempted {
+		var f io.ReadCloser
+		f, err = os.Create(a.donePath)
+		if err != nil {
+			attacherWarn(err)
+			return
+		}
+		f.Close()
 	}
-	f.Close()
 }
 
 // rktStatusWaitReady waits for the container to be ready.
