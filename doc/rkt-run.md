@@ -14,7 +14,7 @@ as defined by the system administrator.
 # OPTIONS
 
 `--config` *config-file*
-alternative config file, requires --dry-run
+alternative config file, requires root or --dry-run
 
 `-e`, `--exec` *command*
 command to run instead of image default

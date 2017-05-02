@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 type optionsT struct {
@@ -135,7 +136,7 @@ func (r *RunnerT) autoPrefix(image string) string {
 }
 
 func (r *RunnerT) parseArgs() error {
-	r.args.options.config = goopt.String([]string{"--config"}, "", "alternative config file, requires --dry-run")
+	r.args.options.config = goopt.String([]string{"--config"}, "", "alternative config file, requires root or --dry-run")
 	r.args.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
 	r.args.options.setenvs = goopt.Strings([]string{"--set-env"}, "", "environment variable")
 	r.args.options.printEnv = goopt.Flag([]string{"--print-env"}, []string{}, "print environment variables passed into container", "")
@@ -159,8 +160,8 @@ $ rkt-run <options> <image> [<args>]
 	args := goopt.Args
 
 	// validate options
-	if *r.args.options.config != "" && !*r.args.options.dryRun {
-		return fmt.Errorf("alternate config file requires dry run")
+	if *r.args.options.config != "" && syscall.Getuid() != 0 && !*r.args.options.dryRun {
+		return fmt.Errorf("alternate config file requires root or dry run")
 	}
 
 	// image
