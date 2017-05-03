@@ -384,7 +384,9 @@ func (r *RunnerT) buildRunCommand() error {
 		argv = append(argv, "--interactive")
 	}
 
-	argv = append(argv, "--uuid-file-save", uuidFilePath())
+	if r.attachStdio() {
+		argv = append(argv, "--uuid-file-save", uuidFilePath())
+	}
 	argv = append(argv, "--set-env-file", envFilePath())
 	argv = append(argv, r.fragments.Options[RunOptions]...)
 
@@ -517,12 +519,11 @@ func (r *RunnerT) fetchAndRun() error {
 	}
 	defer os.Remove(envPath)
 
-	uuidPath := uuidFilePath()
-	defer os.Remove(uuidPath)
-
 	attachReadyPath := filepath.Join(rundir, attachReadyFile)
 	var attach *Attacher
 	if r.attachStdio() {
+		uuidPath := uuidFilePath()
+		defer os.Remove(uuidPath)
 		attach, err = NewAttacher(uuidPath, attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
 		if err != nil {
 			return err
