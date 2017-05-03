@@ -494,19 +494,21 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 	}
 
+	// the master rundir is used for:
+	// - environment file
+	// - uuid file
+	// - attached inotify to slave
 	rundir := masterRunDir()
-	if r.runSlave() {
-		err = os.Mkdir(rundir, os.ModeDir|0755)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			warn := os.Remove(rundir)
-			if warn != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", warn)
-			}
-		}()
+	err = os.Mkdir(rundir, os.ModeDir|0755)
+	if err != nil {
+		return err
 	}
+	defer func() {
+		warn := os.Remove(rundir)
+		if warn != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", warn)
+		}
+	}()
 
 	envPath := envFilePath()
 	err = r.createEnvFile(envPath)
