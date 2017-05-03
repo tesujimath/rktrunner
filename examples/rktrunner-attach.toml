@@ -10,9 +10,8 @@ HOME = "/home/{{.Username}}"
 http_proxy = "{{.http_proxy}}"
 https_proxy = "{{.https_proxy}}"
 
-[options]
+[options.common]
 general = ["--insecure-options=image"]
-fetch = ["--pull-policy=new"]
 run = [
     "--net=host",
 ]

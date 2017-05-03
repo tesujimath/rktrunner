@@ -10,11 +10,11 @@ import (
 
 type fragmentsT struct {
 	Environment map[string]string
-	Options     map[string][]string
+	Options     ModeOptionsT
 	Volume      map[string]VolumeT
 }
 
-func parseAndExecute(desc, tstr string, vars map[string]string) (string, error) {
+func expandFragments(desc, tstr string, vars map[string]string) (string, error) {
 	var result string
 	t, err := template.New(desc).Option("missingkey=zero").Parse(tstr)
 	if err != nil {
@@ -34,7 +34,7 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 
 	f.Environment = make(map[string]string)
 	for envKey, envVal := range c.Environment {
-		s, err := parseAndExecute(fmt.Sprintf("environment %v", envKey), envVal, vars)
+		s, err := expandFragments(fmt.Sprintf("environment %v", envKey), envVal, vars)
 		if err != nil {
 			return err
 		}
@@ -43,28 +43,33 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 		}
 	}
 
-	f.Options = make(map[string][]string)
-	for optKey, optVals := range c.Options {
-		for _, optVal := range optVals {
-			s, err := parseAndExecute(fmt.Sprintf("option %v", optKey), optVal, vars)
-			if err != nil {
-				return err
+	f.Options = make(ModeOptionsT)
+	for mode, options := range c.Options {
+		f.Options[mode] = make(ClassOptionsT)
+
+		for class, classOptions := range options {
+			for _, option := range classOptions {
+				s, err := expandFragments(fmt.Sprintf("%s.%s.%s", OptionsTable, mode, class), option, vars)
+				if err != nil {
+					return err
+				}
+				f.Options[mode][class] = append(f.Options[mode][class], s)
 			}
-			f.Options[optKey] = append(f.Options[optKey], s)
 		}
+
 	}
 
 	f.Volume = make(map[string]VolumeT)
 	for volKey, volVal := range c.Volume {
 		var volFrag VolumeT
 		if volVal.Volume != "" {
-			volFrag.Volume, err = parseAndExecute(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, vars)
+			volFrag.Volume, err = expandFragments(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, vars)
 			if err != nil {
 				return err
 			}
 		}
 		if volVal.Mount != "" {
-			volFrag.Mount, err = parseAndExecute(fmt.Sprintf("volume %s mount", volKey), volVal.Mount, vars)
+			volFrag.Mount, err = expandFragments(fmt.Sprintf("volume %s mount", volKey), volVal.Mount, vars)
 			if err != nil {
 				return err
 			}
@@ -85,6 +90,17 @@ func (f *fragmentsT) printEnvironment(w io.Writer) {
 	for _, key := range keys {
 		fmt.Fprintf(w, "%s=%s\n", key, f.Environment[key])
 	}
+}
+
+func (f *fragmentsT) formatOptions(mode, class string) []string {
+	var s []string
+	for _, option := range f.Options[CommonMode][class] {
+		s = append(s, option)
+	}
+	for _, option := range f.Options[mode][class] {
+		s = append(s, option)
+	}
+	return s
 }
 
 func (f *fragmentsT) formatVolumes() []string {

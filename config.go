@@ -15,10 +15,13 @@ type configT struct {
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
 	Environment           map[string]string `toml:"environment"`
-	Options               map[string][]string
+	Options               ModeOptionsT
 	Volume                map[string]VolumeT
 	Alias                 map[string]ImageAliasT
 }
+
+type ModeOptionsT map[string]ClassOptionsT
+type ClassOptionsT map[string][]string
 
 type VolumeT struct {
 	Volume string
@@ -30,11 +33,54 @@ type ImageAliasT struct {
 	Exec  []string
 }
 
-// valid options
-const GeneralOptions = "general"
-const FetchOptions = "fetch"
-const RunOptions = "run"
-const ImageOptions = "image"
+const OptionsTable = "options"
+
+// valid modes
+const BatchMode = "batch"
+const InteractiveMode = "interactive"
+const CommonMode = "common"
+
+// valid option classes
+const GeneralClass = "general"
+const FetchClass = "fetch"
+const RunClass = "run"
+const ImageClass = "image"
+
+func validateOptionsForModes(modeOptions ModeOptionsT) error {
+	type validModeT map[string]bool
+	validMode := validModeT{
+		BatchMode:       true,
+		InteractiveMode: true,
+		CommonMode:      true,
+	}
+	for mode, classOptions := range modeOptions {
+		if !validMode[mode] {
+			return fmt.Errorf("invalid %s.%s", OptionsTable, mode)
+		}
+		err := validateClassOptions(mode, classOptions)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateClassOptions(mode string, classOptions ClassOptionsT) error {
+	type validClassT map[string]bool
+	validClass := validClassT{
+		GeneralClass: true,
+		FetchClass:   true,
+		RunClass:     true,
+		ImageClass:   true,
+	}
+
+	for class := range classOptions {
+		if !validClass[class] {
+			return fmt.Errorf("invalid %s.%s.%s", OptionsTable, mode, class)
+		}
+	}
+	return nil
+}
 
 func GetConfig(path string, c *configT) error {
 	_, err := toml.DecodeFile(path, c)
@@ -46,7 +92,7 @@ func GetConfig(path string, c *configT) error {
 		return err
 	}
 
-	// validate options
+	// validate
 	if c.Rkt == "" {
 		return fmt.Errorf("missing rkt")
 	}
@@ -65,19 +111,5 @@ func GetConfig(path string, c *configT) error {
 		}
 	}
 
-	type validOptionsT map[string]bool
-	validOptions := validOptionsT{
-		GeneralOptions: true,
-		FetchOptions:   true,
-		RunOptions:     true,
-		ImageOptions:   true,
-	}
-
-	for optKey := range c.Options {
-		if !validOptions[optKey] {
-			return fmt.Errorf("unknown option: %s", optKey)
-		}
-	}
-
-	return nil
+	return validateOptionsForModes(c.Options)
 }

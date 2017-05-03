@@ -96,6 +96,13 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		r.environExtra["RKT_EXPERIMENT_ATTACH"] = "true"
 	}
 
+	var mode string
+	if *r.args.options.interactive {
+		mode = InteractiveMode
+	} else {
+		mode = BatchMode
+	}
+
 	// different functionality depending on options, see Execute()
 	switch {
 	case *r.args.options.listAlias:
@@ -105,11 +112,11 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
 		}
-		err = r.buildFetchCommand()
+		err = r.buildFetchCommand(mode)
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
 		}
-		err = r.buildRunCommand()
+		err = r.buildRunCommand(mode)
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
 		}
@@ -357,14 +364,14 @@ func (r *RunnerT) formatMounts() []string {
 	return mounts
 }
 
-func (r *RunnerT) buildFetchCommand() error {
+func (r *RunnerT) buildFetchCommand(mode string) error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
 	argv[0] = filepath.Base(argv0)
-	argv = append(argv, r.fragments.Options[GeneralOptions]...)
+	argv = append(argv, r.fragments.Options[mode][GeneralClass]...)
 	argv = append(argv, "fetch")
 
-	argv = append(argv, r.fragments.Options[FetchOptions]...)
+	argv = append(argv, r.fragments.Options[mode][FetchClass]...)
 
 	argv = append(argv, r.image)
 
@@ -374,11 +381,11 @@ func (r *RunnerT) buildFetchCommand() error {
 	return nil
 }
 
-func (r *RunnerT) buildRunCommand() error {
+func (r *RunnerT) buildRunCommand(mode string) error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
 	argv[0] = filepath.Base(argv0)
-	argv = append(argv, r.fragments.Options[GeneralOptions]...)
+	argv = append(argv, r.fragments.formatOptions(mode, GeneralClass)...)
 	argv = append(argv, "run")
 	if *r.args.options.interactive {
 		argv = append(argv, "--interactive")
@@ -388,7 +395,7 @@ func (r *RunnerT) buildRunCommand() error {
 		argv = append(argv, "--uuid-file-save", uuidFilePath())
 	}
 	argv = append(argv, "--set-env-file", envFilePath())
-	argv = append(argv, r.fragments.Options[RunOptions]...)
+	argv = append(argv, r.fragments.formatOptions(mode, RunClass)...)
 
 	argv = append(argv, r.formatVolumes()...)
 	argv = append(argv, r.image)
@@ -398,7 +405,7 @@ func (r *RunnerT) buildRunCommand() error {
 	}
 
 	argv = append(argv, r.formatMounts()...)
-	argv = append(argv, r.fragments.Options[ImageOptions]...)
+	argv = append(argv, r.fragments.formatOptions(mode, ImageClass)...)
 
 	if r.runSlave() {
 		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
