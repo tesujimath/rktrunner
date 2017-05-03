@@ -22,7 +22,7 @@
 
 ## options
 
-[options]
+[options.*mode*] ` # mode is one of interactive, batch, common`
 
 `general = ` *list-of-string* `# options passed to rkt program`
 
@@ -78,7 +78,7 @@ HOME = "/home/{{.Username}}"
 http_proxy = "{{.http_proxy}}"
 https_proxy = "{{.https_proxy}}"
 
-[options]
+[options.common]
 general = ["--insecure-options=image"]
 run = [
     "--net=host",
