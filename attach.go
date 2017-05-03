@@ -13,17 +13,17 @@ import (
 )
 
 type Attacher struct {
-	uuidPath        string
-	uuidDirEvents   chan notify.EventInfo
-	donePath        string
-	environ         []string
-	verbose         bool
-	abort           chan bool
-	rktAttachStatus chan error
+	uuidPath      string
+	uuidDirEvents chan notify.EventInfo
+	donePath      string
+	environ       []string
+	verbose       bool
+	abort         chan bool
+	errs          chan error
 }
 
 // NewAttacher creates an Attacher, after which if done with no error,
-// the caller *must* call Wait() or Abort().
+// the caller *must* call Wait().
 func NewAttacher(uuidPath, donePath string, environ []string, verbose bool) (*Attacher, error) {
 	uuidDirEvents := make(chan notify.EventInfo, 2)
 	err := notify.Watch(filepath.Dir(uuidPath), uuidDirEvents, notify.InCloseWrite)
@@ -32,13 +32,13 @@ func NewAttacher(uuidPath, donePath string, environ []string, verbose bool) (*At
 	}
 
 	return &Attacher{
-		uuidPath:        uuidPath,
-		uuidDirEvents:   uuidDirEvents,
-		donePath:        donePath,
-		environ:         environ,
-		verbose:         verbose,
-		abort:           make(chan bool),
-		rktAttachStatus: make(chan error),
+		uuidPath:      uuidPath,
+		uuidDirEvents: uuidDirEvents,
+		donePath:      donePath,
+		environ:       environ,
+		verbose:       verbose,
+		abort:         make(chan bool),
+		errs:          make(chan error),
 	}, nil
 }
 
@@ -47,13 +47,12 @@ func attacherWarn(err error) {
 }
 
 func (a *Attacher) Abort() {
-	notify.Stop(a.uuidDirEvents)
 	close(a.abort)
 }
 
 func (a *Attacher) Wait() error {
 	notify.Stop(a.uuidDirEvents)
-	err := <-a.rktAttachStatus
+	err := <-a.errs
 	return err
 }
 
@@ -67,7 +66,6 @@ loop:
 		select {
 		case _, ok := <-a.abort:
 			if !ok {
-				attacherWarn(fmt.Errorf("abort"))
 				break loop
 			}
 		case ei := <-a.uuidDirEvents:
@@ -95,12 +93,8 @@ loop:
 		}
 	}
 
-	if err != nil {
-		attacherWarn(err)
-	}
-
-	// notify slave that attachment is ready
 	if attachAttempted {
+		// notify slave that attachment is ready
 		var f io.ReadCloser
 		f, err = os.Create(a.donePath)
 		if err != nil {
@@ -108,11 +102,16 @@ loop:
 			return
 		}
 		f.Close()
+	} else {
+		if err != nil {
+			a.errs <- err
+		}
+		close(a.errs)
 	}
 }
 
 // rktStatusWaitReady waits for the container to be ready.
-// Any error is returned on the rktAttachStatus channel.
+// Any error is returned on the errs channel.
 func (a *Attacher) rktStatusWaitReady(uuid string) error {
 	args := []string{"rkt", "status", "--wait-ready", uuid}
 	cmd := exec.Command(args[0], args[1:]...)
@@ -123,7 +122,7 @@ func (a *Attacher) rktStatusWaitReady(uuid string) error {
 }
 
 // rktAttach attaches to a container by UUID.
-// Any error is returned on the rktAttachStatus channel.
+// Any error is returned on the errs channel.
 func (a *Attacher) rktAttach(uuid string) {
 	args := []string{"rkt", "attach", "--mode", "stdin,stdout,stderr", uuid}
 	cmd := exec.Command(args[0], args[1:]...)
@@ -140,7 +139,7 @@ func (a *Attacher) rktAttach(uuid string) {
 		err = cmd.Wait()
 	}
 	if err != nil {
-		a.rktAttachStatus <- err
+		a.errs <- err
 	}
-	close(a.rktAttachStatus)
+	close(a.errs)
 }

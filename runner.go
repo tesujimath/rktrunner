@@ -561,12 +561,12 @@ func (r *RunnerT) fetchAndRun() error {
 	if r.attachStdio() {
 		if err != nil {
 			attach.Abort()
-		} else {
-			// ignore errors on cleanup
-			warn := attach.Wait()
-			if warn != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", warn)
-			}
+		}
+
+		// report any error from attach, then discard it
+		warn := attach.Wait()
+		if warn != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", warn)
 		}
 	}
 
