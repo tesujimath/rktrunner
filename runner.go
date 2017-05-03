@@ -213,7 +213,7 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
-			err = r.registerAlias(w, warn, exec, &aliasT{image: imageAlias.Image, exec: exec})
+			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{image: imageAlias.Image, exec: exec})
 			if err != nil && anyErr == nil {
 				anyErr = err
 			}
