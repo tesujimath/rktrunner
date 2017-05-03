@@ -11,6 +11,7 @@ type configT struct {
 	Rkt                   string
 	AttachStdio           bool              `toml:"attach-stdio"`
 	PreserveCwd           bool              `toml:"preserve-cwd"`
+	UsePath               bool              `toml:"use-path"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
@@ -102,6 +103,9 @@ func GetConfig(path string, c *configT) error {
 	}
 	if c.PreserveCwd && c.ExecSlaveDir == "" {
 		return fmt.Errorf("preserve-stdio requires exec-slave-dir")
+	}
+	if c.UsePath && c.ExecSlaveDir == "" {
+		return fmt.Errorf("use-path requires exec-slave-dir")
 	}
 	if c.ExecSlaveDir != "" {
 		p := filepath.Join(c.ExecSlaveDir, slaveRunner)

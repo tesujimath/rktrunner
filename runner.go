@@ -133,7 +133,7 @@ func (r *RunnerT) attachStdio() bool {
 
 // runSlave returns whether we need to run the slave
 func (r *RunnerT) runSlave() bool {
-	return r.attachStdio() || r.config.PreserveCwd
+	return r.attachStdio() || r.config.PreserveCwd || r.config.UsePath
 }
 
 func (r *RunnerT) autoPrefix(image string) string {

@@ -12,6 +12,11 @@
 
 `preserve-cwd = ` *bool* `# whether to change to the host working directory in the container`
 
+`use-path = ` *bool* `# whether to use the container path to find the entry point`
+
+Note: `use-path` is only useful when using *stage1-fly*, and is a work-around for
+[this issue](https://github.com/rkt/rkt/issues/3662).
+
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
 ## environment
