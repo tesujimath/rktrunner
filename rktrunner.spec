@@ -19,8 +19,8 @@ using rkt, in a controlled fashion.
 
 All rkt run options are controlled by the config file,
 /etc/rktrunner.toml, which should be carefully setup by the local
-sysadmin, perhaps based on the example which may be found in
-%{_datadir}/doc/%{name}-%{version}/rktrunner.toml.
+sysadmin, perhaps based on the examples which may be found in
+%{_datadir}/doc/%{name}-%{version}.
 
 %prep
 %setup -q -c
@@ -57,7 +57,7 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root,-)
-%doc LICENSE README.md examples/rktrunner.toml
+%doc LICENSE README.md examples/*
 %{_mandir}/man1/*
 %{_mandir}/man5/*
 %attr(04755,root,root) %{_bindir}/rkt-run
