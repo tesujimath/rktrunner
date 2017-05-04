@@ -1,6 +1,6 @@
 rkt = "/usr/bin/rkt"
-attach-stdio = true
 preserve-cwd = true
+use-path = true
 exec-slave-dir = "/usr/libexec/rktrunner"
 default-interactive-cmd = "sh"
 
@@ -21,6 +21,11 @@ image = [
     "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
 ]
 
+[options.batch]
+run = [
+    "--stage1-name=coreos.com/rkt/stage1-fly:1.25.0",
+]
+
 [auto-image-prefix]
 "biocontainers/" = "docker://biocontainers/"
 
@@ -35,12 +40,6 @@ mount = "target=/dataset"
 [volume.bifo]
 volume = "kind=host,source=/bifo"
 mount = "target=/bifo"
-
-[volume.volume-config]
-volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
-
-[volume.volume-data]
-volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
 
 #
 # Aliases - keep alphabetical
