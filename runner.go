@@ -20,6 +20,7 @@ var ErrRktRunFailed = errors.New("rkt run failed")
 type optionsT struct {
 	config        *string
 	exec          *string
+	volumes       *[]string
 	setenvs       *[]string
 	printEnv      *bool
 	interactive   *bool
@@ -47,16 +48,17 @@ type aliasT struct {
 }
 
 type RunnerT struct {
-	config       configT
-	environ      map[string]string
-	environExtra map[string]string
-	alias        map[string]aliasT
-	fragments    fragmentsT
-	args         argsT
-	image        string
-	exec         string
-	fetchCommand commandT
-	runCommand   commandT
+	config           configT
+	environ          map[string]string
+	environExtra     map[string]string
+	alias            map[string]aliasT
+	requestedVolumes map[string]bool
+	fragments        fragmentsT
+	args             argsT
+	image            string
+	exec             string
+	fetchCommand     commandT
+	runCommand       commandT
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -73,6 +75,11 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	err = GetConfig(configFile, &r.config)
 	if err != nil {
 		return nil, fmt.Errorf("configuration error: %v", err)
+	}
+
+	err = r.validateRequestedVolumes()
+	if err != nil {
+		return nil, err
 	}
 
 	r.parseEnviron()
@@ -125,6 +132,29 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	return &r, nil
 }
 
+// validateRequestedVolumes checks whether the user is requesting
+// only what is allowed
+func (r *RunnerT) validateRequestedVolumes() error {
+	// check volumes passed on command line are in config file as on-request
+	r.requestedVolumes = make(map[string]bool)
+	for _, requested := range *r.args.options.volumes {
+		valid := true
+		vol, ok := r.config.Volume[requested]
+		if ok {
+			// We don't let user request default volumes,
+			// only on-request ones.
+			valid = vol.OnRequest
+		} else {
+			valid = false
+		}
+		if !valid {
+			return fmt.Errorf("invalid volume: %s", requested)
+		}
+		r.requestedVolumes[requested] = true
+	}
+	return nil
+}
+
 // attachStdio returns whether we need to attach stdio,
 // which we don't do in interactive mode
 func (r *RunnerT) attachStdio() bool {
@@ -148,6 +178,7 @@ func (r *RunnerT) autoPrefix(image string) string {
 func (r *RunnerT) parseArgs() error {
 	r.args.options.config = goopt.String([]string{"--config"}, "", "alternative config file, requires root or --dry-run")
 	r.args.options.exec = goopt.String([]string{"-e", "--exec"}, "", "command to run instead of image default")
+	r.args.options.volumes = goopt.Strings([]string{"--volume"}, "", "activate pre-defined volume")
 	r.args.options.setenvs = goopt.Strings([]string{"--set-env"}, "", "environment variable")
 	r.args.options.printEnv = goopt.Flag([]string{"--print-env"}, []string{}, "print environment variables passed into container", "")
 	r.args.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
@@ -345,7 +376,7 @@ func (r *RunnerT) resolveImage() error {
 }
 
 func (r *RunnerT) formatVolumes() []string {
-	volumes := r.fragments.formatVolumes()
+	volumes := r.fragments.formatVolumes(r.requestedVolumes)
 	if r.runSlave() {
 		volumes = append(volumes,
 			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()),
@@ -355,7 +386,7 @@ func (r *RunnerT) formatVolumes() []string {
 }
 
 func (r *RunnerT) formatMounts() []string {
-	mounts := r.fragments.formatMounts()
+	mounts := r.fragments.formatMounts(r.requestedVolumes)
 	if r.runSlave() {
 		mounts = append(mounts,
 			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir),
@@ -476,9 +507,21 @@ func (r *RunnerT) Execute() error {
 	default:
 		if !*r.args.options.dryRun {
 			return r.fetchAndRun()
+		} else if *r.args.options.verbose {
+			r.printFetchAndRun()
 		}
 	}
 	return nil
+}
+
+// printFetchAndRun just prints the commands which would be used
+func (r *RunnerT) printFetchAndRun() {
+	// separate fetch is not working reliably, so hide it
+	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
+	if separateFetch {
+		r.printFetchCommand(os.Stderr)
+	}
+	r.printRunCommand(os.Stderr, 0)
 }
 
 // fetchAndRun fetches the image, and runs the command, waiting for it to complete

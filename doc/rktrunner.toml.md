@@ -49,6 +49,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `mount = ` *string* `# parameters passed to --mount`
 
+`on-request = ` *bool* `# only include this volume if requested by user`
+
 ## alias
 
 `[alias.` *identifier* `]`

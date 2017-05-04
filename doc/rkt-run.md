@@ -19,6 +19,9 @@ alternative config file, requires root or --dry-run
 `-e`, `--exec` *command*
 command to run instead of image default
 
+`--volume` *name*
+include on-request volume as per config file
+
 `--set-env` *name=value*
 set environment variable in container
 

@@ -61,7 +61,7 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 
 	f.Volume = make(map[string]VolumeT)
 	for volKey, volVal := range c.Volume {
-		var volFrag VolumeT
+		volFrag := VolumeT{OnRequest: volVal.OnRequest}
 		if volVal.Volume != "" {
 			volFrag.Volume, err = expandFragments(fmt.Sprintf("volume %s volume", volKey), volVal.Volume, vars)
 			if err != nil {
@@ -103,20 +103,20 @@ func (f *fragmentsT) formatOptions(mode, class string) []string {
 	return s
 }
 
-func (f *fragmentsT) formatVolumes() []string {
+func (f *fragmentsT) formatVolumes(requested map[string]bool) []string {
 	var s []string
 	for key, vol := range f.Volume {
-		if vol.Volume != "" {
+		if vol.Volume != "" && (!vol.OnRequest || requested[key]) {
 			s = append(s, "--volume", fmt.Sprintf("%s,%s", key, vol.Volume))
 		}
 	}
 	return s
 }
 
-func (f *fragmentsT) formatMounts() []string {
+func (f *fragmentsT) formatMounts(requested map[string]bool) []string {
 	var s []string
 	for key, vol := range f.Volume {
-		if vol.Mount != "" {
+		if vol.Mount != "" && (!vol.OnRequest || requested[key]) {
 			s = append(s, "--mount", fmt.Sprintf("volume=%s,%s", key, vol.Mount))
 		}
 	}

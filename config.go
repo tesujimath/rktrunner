@@ -25,8 +25,9 @@ type ModeOptionsT map[string]ClassOptionsT
 type ClassOptionsT map[string][]string
 
 type VolumeT struct {
-	Volume string
-	Mount  string
+	Volume    string
+	Mount     string
+	OnRequest bool `toml:"on-request"`
 }
 
 type ImageAliasT struct {

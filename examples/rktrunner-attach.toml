@@ -38,9 +38,11 @@ mount = "target=/bifo"
 
 [volume.volume-config]
 volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
+on-request = true
 
 [volume.volume-data]
 volume = "kind=empty,uid={{.Uid}},gid={{.Gid}}"
+on-request = true
 
 #
 # Aliases - keep alphabetical
