@@ -1,4 +1,5 @@
 rkt = "/usr/bin/rkt"
+recursive-mounts = true
 preserve-cwd = true
 use-path = true
 exec-slave-dir = "/usr/libexec/rktrunner"
@@ -21,11 +22,8 @@ image = [
     "--user={{.Uid}}",
     "--group={{.Gid}}",
     "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
-    "--stage1-name=coreos.com/rkt/stage1-fly:1.25.0",
+    "--stage1-name=coreos.com/rkt/stage1-fly:1.26.0",
 ]
-
-[auto-image-prefix]
-"biocontainers/" = "docker://biocontainers/"
 
 [volume.home]
 volume = "kind=host,source={{.HomeDir}}"
