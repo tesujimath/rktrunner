@@ -10,6 +10,8 @@
 
 `attach-stdio = ` *bool* `# whether to use experimental rkt attach for stdin,stdout,stderr streams`
 
+`recursive-mounts = ` *bool* `# whether to mount all volumes recursively`
+
 `preserve-cwd = ` *bool* `# whether to change to the host working directory in the container`
 
 `use-path = ` *bool* `# whether to use the container path to find the entry point`

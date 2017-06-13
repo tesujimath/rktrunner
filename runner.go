@@ -375,12 +375,20 @@ func (r *RunnerT) resolveImage() error {
 	return nil
 }
 
+func formatVolume(recursiveMounts bool, name, attrs string) string {
+	var recursiveOption string
+	if recursiveMounts {
+		recursiveOption = ",recursive=true"
+	}
+	return fmt.Sprintf("%s,%s%s", name, attrs, recursiveOption)
+}
+
 func (r *RunnerT) formatVolumes() []string {
-	volumes := r.fragments.formatVolumes(r.requestedVolumes)
+	volumes := r.fragments.formatVolumes(r.config.RecursiveMounts, r.requestedVolumes)
 	if r.runSlave() {
 		volumes = append(volumes,
-			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()),
-			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
+			"--volume", formatVolume(r.config.RecursiveMounts, slaveRunVolume, fmt.Sprintf("kind=host,source=%s", masterRunDir())),
+			"--volume", formatVolume(r.config.RecursiveMounts, slaveBinVolume, fmt.Sprintf("kind=host,source=%s", r.config.ExecSlaveDir)))
 	}
 	return volumes
 }

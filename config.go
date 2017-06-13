@@ -10,6 +10,7 @@ import (
 type configT struct {
 	Rkt                   string
 	AttachStdio           bool              `toml:"attach-stdio"`
+	RecursiveMounts       bool              `toml:"recursive-mounts"`
 	PreserveCwd           bool              `toml:"preserve-cwd"`
 	UsePath               bool              `toml:"use-path"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`

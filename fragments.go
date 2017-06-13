@@ -103,11 +103,11 @@ func (f *fragmentsT) formatOptions(mode, class string) []string {
 	return s
 }
 
-func (f *fragmentsT) formatVolumes(requested map[string]bool) []string {
+func (f *fragmentsT) formatVolumes(recursiveMounts bool, requested map[string]bool) []string {
 	var s []string
 	for key, vol := range f.Volume {
 		if vol.Volume != "" && (!vol.OnRequest || requested[key]) {
-			s = append(s, "--volume", fmt.Sprintf("%s,%s", key, vol.Volume))
+			s = append(s, "--volume", formatVolume(recursiveMounts, key, vol.Volume))
 		}
 	}
 	return s
