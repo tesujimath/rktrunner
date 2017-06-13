@@ -8,7 +8,7 @@
 
 `default-interactive-cmd = ` *string* `# shell for interactive containers`
 
-`attach-stdio = ` *bool* `# whether to use experimental rkt attach for stdin,stdout,stderr streams`
+`attach-stdio = ` *bool* `# whether to attach stdin,stdout,stderr streams`
 
 `preserve-cwd = ` *bool* `# whether to change to the host working directory in the container`
 

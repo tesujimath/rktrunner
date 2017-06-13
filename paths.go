@@ -8,20 +8,20 @@ import (
 
 const slaveBinVolume = "rktrunner-bin"
 const slaveBinDir = "/usr/lib/rktrunner"
-const slaveRunVolume = "rktrunner-run"
-const slaveRunDir = "/var/run/rktrunner"
+
+const slaveFdVolume = "rktrunner-fd"
+const slaveFdDir = "/var/run/rktrunner"
 
 const slaveRunner = "rkt-run-slave"
-const attachReadyFile = "attached"
 
 func masterRunDir() string {
 	return fmt.Sprintf("/tmp/rktrunner%d", os.Getpid())
 }
 
-func envFilePath() string {
-	return filepath.Join(masterRunDir(), "env")
+func masterFdDir() string {
+	return fmt.Sprintf("/proc/%d/fd", os.Getpid())
 }
 
-func uuidFilePath() string {
-	return filepath.Join(masterRunDir(), "uuid")
+func envFilePath() string {
+	return filepath.Join(masterRunDir(), "env")
 }

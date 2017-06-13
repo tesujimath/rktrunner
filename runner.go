@@ -99,10 +99,6 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
 
-	if r.attachStdio() {
-		r.environExtra["RKT_EXPERIMENT_ATTACH"] = "true"
-	}
-
 	var mode string
 	if *r.args.options.interactive {
 		mode = InteractiveMode
@@ -379,8 +375,13 @@ func (r *RunnerT) formatVolumes() []string {
 	volumes := r.fragments.formatVolumes(r.requestedVolumes)
 	if r.runSlave() {
 		volumes = append(volumes,
-			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()),
 			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
+
+		if r.attachStdio() {
+			volumes = append(volumes,
+				"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveFdVolume, masterFdDir()))
+
+		}
 	}
 	return volumes
 }
@@ -389,8 +390,12 @@ func (r *RunnerT) formatMounts() []string {
 	mounts := r.fragments.formatMounts(r.requestedVolumes)
 	if r.runSlave() {
 		mounts = append(mounts,
-			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir),
 			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveBinVolume, slaveBinDir))
+
+		if r.attachStdio() {
+			mounts = append(mounts,
+				"--mount", fmt.Sprintf("volume=%s,target=%s", slaveFdVolume, slaveFdDir))
+		}
 	}
 	return mounts
 }
@@ -422,18 +427,11 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 		argv = append(argv, "--interactive")
 	}
 
-	if r.attachStdio() {
-		argv = append(argv, "--uuid-file-save", uuidFilePath())
-	}
 	argv = append(argv, "--set-env-file", envFilePath())
 	argv = append(argv, r.fragments.formatOptions(mode, RunClass)...)
 
 	argv = append(argv, r.formatVolumes()...)
 	argv = append(argv, r.image)
-
-	if r.attachStdio() {
-		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
-	}
 
 	argv = append(argv, r.formatMounts()...)
 	argv = append(argv, r.fragments.formatOptions(mode, ImageClass)...)
@@ -441,7 +439,7 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 	if r.runSlave() {
 		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
 		if r.attachStdio() {
-			argv = append(argv, "--await-file", filepath.Join(slaveRunDir, attachReadyFile))
+			argv = append(argv, "--attach-stdio", slaveFdDir)
 		}
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
@@ -477,6 +475,15 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 
 func (r *RunnerT) printFetchCommand(w io.Writer) {
 	fmt.Fprintf(w, "%s %s\n", r.fetchCommand.argv0, strings.Join(r.fetchCommand.argv[1:], " "))
+}
+
+func (r *RunnerT) printStdioFd() {
+	printCmd := exec.Command("ls", "-l", masterFdDir())
+	printCmd.Path = "/bin/ls"
+	printCmd.Stdin = os.Stdin
+	printCmd.Stdout = os.Stdout
+	printCmd.Stderr = os.Stderr
+	printCmd.Run()
 }
 
 func (r *RunnerT) printRunCommand(w io.Writer, pid int) {
@@ -548,8 +555,6 @@ func (r *RunnerT) fetchAndRun() error {
 
 	// the master rundir is used for:
 	// - environment file
-	// - uuid file
-	// - attached inotify to slave
 	rundir := masterRunDir()
 	err = os.Mkdir(rundir, os.ModeDir|0755)
 	if err != nil {
@@ -569,26 +574,13 @@ func (r *RunnerT) fetchAndRun() error {
 	}
 	defer os.Remove(envPath)
 
-	attachReadyPath := filepath.Join(rundir, attachReadyFile)
-	var attach *Attacher
-	if r.attachStdio() {
-		uuidPath := uuidFilePath()
-		defer os.Remove(uuidPath)
-		attach, err = NewAttacher(uuidPath, attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
-		if err != nil {
-			return err
-		}
-		go attach.Attach()
-		defer os.Remove(attachReadyPath)
-	}
+	r.printStdioFd()
 
 	runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
 	runCmd.Path = r.runCommand.argv0
 	runCmd.Env = r.runCommand.envv
-	if !r.attachStdio() {
-		runCmd.Stdin = os.Stdin
-		runCmd.Stdout = os.Stdout
-	}
+	runCmd.Stdin = os.Stdin
+	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	err = runCmd.Start()
 	if err == nil {
@@ -608,18 +600,6 @@ func (r *RunnerT) fetchAndRun() error {
 	} else {
 		if *r.args.options.verbose {
 			r.printRunCommand(os.Stderr, 0)
-		}
-	}
-
-	if r.attachStdio() {
-		if err != nil {
-			attach.Abort()
-		}
-
-		// report any error from attach, then discard it
-		warn := attach.Wait()
-		if warn != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", warn)
 		}
 	}
 

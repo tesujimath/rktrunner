@@ -89,6 +89,6 @@ puts 'Hello World from Ruby version ' + RUBY_VERSION
 ## rkt-run-slave
 
 `rkt-run-slave` is another wrapper, which runs within the container.
-It optionally waits for stdio attachment before running the target
-program, and also optionally changes to the working directory as on
+It optionally attaches stdin/stdout/stderr in the pod to the host,
+and also optionally changes to the working directory as on
 the host.

@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/droundy/goopt"
-	"github.com/rjeczalik/notify"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 )
 
 func die(format string, args ...interface{}) {
@@ -20,35 +18,9 @@ func exists(path string) bool {
 	return !os.IsNotExist(err)
 }
 
-// await waits until the path appears
-func await(path string) error {
-	awaitDirEvents := make(chan notify.EventInfo, 2)
-	err := notify.Watch(filepath.Dir(path), awaitDirEvents, notify.InCloseWrite)
-	if err != nil {
-		return err
-	}
-	defer notify.Stop(awaitDirEvents)
-
-	// check after creating awaitDirEvents, to avoid race
-	if exists(path) {
-		return nil
-	}
-
-	for {
-		switch ei := <-awaitDirEvents; ei.Event() {
-		case notify.InCloseWrite:
-			if exists(path) {
-				return nil
-			}
-		}
-	}
-	// unreached
-	return nil
-}
-
 func main() {
-	awaitFile := goopt.String([]string{"--await-file"}, "", "wait for file to exist before running")
 	cwd := goopt.String([]string{"--cwd"}, "", "run with current working directory")
+	attachStdio := goopt.String([]string{"--attach-stdio"}, "", "directory containing host file descriptors to attach for stdio")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
 	goopt.Summary = "Slave program to run within rkt container"
@@ -56,12 +28,8 @@ func main() {
 	goopt.Parse(nil)
 	args := goopt.Args
 
-	if *awaitFile != "" {
-		err := await(*awaitFile)
-		if err != nil {
-			die("%v", err)
-		}
-	}
+	// TODO remove:
+	fmt.Fprintf(os.Stderr, "rkt-run-slave: running %v\n", args)
 
 	if *cwd != "" {
 		err := os.Chdir(*cwd)
@@ -79,7 +47,28 @@ func main() {
 		if err != nil {
 			die("%v", err)
 		}
-		err = syscall.Exec(argv0, args, os.Environ())
+
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Path = argv0
+		if *attachStdio != "" {
+			cmd.Stdin, err = os.OpenFile(filepath.Join(*attachStdio, "0"), os.O_RDONLY, 0)
+			if err != nil {
+				die("%v", err)
+			}
+			cmd.Stdout, err = os.OpenFile(filepath.Join(*attachStdio, "1"), os.O_WRONLY, 0)
+			if err != nil {
+				die("%v", err)
+			}
+			cmd.Stderr, err = os.OpenFile(filepath.Join(*attachStdio, "2"), os.O_WRONLY, 0)
+			if err != nil {
+				die("%v", err)
+			}
+		} else {
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		}
+		err = cmd.Run()
 		if err != nil {
 			die("%v", err)
 		}
