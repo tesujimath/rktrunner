@@ -1,5 +1,4 @@
 rkt = "/usr/bin/rkt"
-recursive-mounts = true
 preserve-cwd = true
 use-path = true
 exec-slave-dir = "/usr/libexec/rktrunner"
@@ -25,6 +24,10 @@ image = [
     "--stage1-name=coreos.com/rkt/stage1-fly:1.26.0",
 ]
 
+[volume.tmp]
+volume = "kind=host,source=/tmp"
+mount = "target=/tmp"
+
 [volume.home]
 volume = "kind=host,source={{.HomeDir}}"
 mount = "target=/home/{{.Username}}"
@@ -34,7 +37,7 @@ volume = "kind=host,source=/dataset"
 mount = "target=/dataset"
 
 [volume.bifo]
-volume = "kind=host,source=/bifo"
+volume = "kind=host,source=/bifo,recursive=true"
 mount = "target=/bifo"
 
 [volume.volume-config]
