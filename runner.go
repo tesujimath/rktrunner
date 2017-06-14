@@ -379,8 +379,11 @@ func (r *RunnerT) formatVolumes() []string {
 	volumes := r.fragments.formatVolumes(r.requestedVolumes)
 	if r.runSlave() {
 		volumes = append(volumes,
-			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()),
 			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
+		if r.attachStdio() {
+			volumes = append(volumes,
+				"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()))
+		}
 	}
 	return volumes
 }
@@ -389,8 +392,11 @@ func (r *RunnerT) formatMounts() []string {
 	mounts := r.fragments.formatMounts(r.requestedVolumes)
 	if r.runSlave() {
 		mounts = append(mounts,
-			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir),
 			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveBinVolume, slaveBinDir))
+		if r.attachStdio() {
+			mounts = append(mounts,
+				"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir))
+		}
 	}
 	return mounts
 }
@@ -558,7 +564,7 @@ func (r *RunnerT) fetchAndRun() error {
 	defer func() {
 		warn := os.Remove(rundir)
 		if warn != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", warn)
+			fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 		}
 	}()
 
