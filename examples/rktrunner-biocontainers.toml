@@ -7,6 +7,8 @@ default-interactive-cmd = "sh"
 [environment]
 # these are passed in a file, not on the command line
 HOME = "/home/{{.Username}}"
+USER = "{{.Uid}}"
+LOGNAME = "{{.Uid}}"
 http_proxy = "{{.http_proxy}}"
 https_proxy = "{{.https_proxy}}"
 TERM = "{{.TERM}}"
