@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/droundy/goopt"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/droundy/goopt"
 )
 
 var ErrRktRunFailed = errors.New("rkt run failed")
@@ -557,7 +558,7 @@ func (r *RunnerT) fetchAndRun() error {
 	// - uuid file
 	// - attached inotify to slave
 	rundir := masterRunDir()
-	err = os.Mkdir(rundir, os.ModeDir|0755)
+	err = os.MkdirAll(rundir, 0755)
 	if err != nil {
 		return err
 	}
