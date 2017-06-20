@@ -43,6 +43,39 @@ type commandT struct {
 	argv0 string
 	argv  []string
 	envv  []string
+	cmd   *exec.Cmd
+}
+
+func (c *commandT) Print(w io.Writer) {
+	fmt.Fprintf(w, "%s %s", c.argv0, strings.Join(c.argv[1:], " "))
+	if c.cmd.Process != nil {
+		fmt.Fprintf(w, " (pid %d)\n", c.cmd.Process.Pid)
+	} else {
+		fmt.Fprintf(w, "\n")
+	}
+}
+
+func (c *commandT) create() {
+	c.cmd = exec.Command(c.argv[0], c.argv[1:]...)
+	c.cmd.Path = c.argv0
+	c.cmd.Env = c.envv
+	c.cmd.Stdin = os.Stdin
+	c.cmd.Stdout = os.Stdout
+	c.cmd.Stderr = os.Stderr
+}
+
+func (c *commandT) Run() error {
+	c.create()
+	return c.cmd.Run()
+}
+
+func (c *commandT) Start() error {
+	c.create()
+	return c.cmd.Start()
+}
+
+func (c *commandT) Wait() error {
+	return c.cmd.Wait()
 }
 
 type aliasT struct {
@@ -53,7 +86,6 @@ type aliasT struct {
 type RunnerT struct {
 	config           configT
 	environ          map[string]string
-	environExtra     map[string]string
 	alias            map[string]aliasT
 	requestedVolumes map[string]bool
 	fragments        fragmentsT
@@ -271,7 +303,6 @@ func (r *RunnerT) printAliases(w io.Writer) {
 // parseEnviron extracts all environment variables into a map
 func (r *RunnerT) parseEnviron() {
 	r.environ = make(map[string]string)
-	r.environExtra = make(map[string]string)
 	for _, keyval := range os.Environ() {
 		i := strings.IndexRune(keyval, '=')
 		if i != -1 {
@@ -301,9 +332,6 @@ func (r *RunnerT) buildEnviron() []string {
 	var result []string
 	mergedEnviron := make(map[string]string)
 	for key, val := range r.environ {
-		mergedEnviron[key] = val
-	}
-	for key, val := range r.environExtra {
 		mergedEnviron[key] = val
 	}
 	for key, val := range mergedEnviron {
@@ -495,38 +523,6 @@ func (r *RunnerT) buildEnterCommand() error {
 	return nil
 }
 
-func (r *RunnerT) printFetchCommand(w io.Writer) {
-	fmt.Fprintf(w, "%s %s\n", r.fetchCommand.argv0, strings.Join(r.fetchCommand.argv[1:], " "))
-}
-
-func (r *RunnerT) printRunCommand(w io.Writer, pid int) {
-	// get keys in order
-	keys := make([]string, 0, len(r.environExtra))
-	for key := range r.environExtra {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		fmt.Fprintf(w, "%s=%s ", key, r.environExtra[key])
-	}
-
-	fmt.Fprintf(w, "%s %s", r.runCommand.argv0, strings.Join(r.runCommand.argv[1:], " "))
-	if pid > 0 {
-		fmt.Fprintf(w, " (pid %d)\n", pid)
-	} else {
-		fmt.Fprintf(w, "\n")
-	}
-}
-
-func (r *RunnerT) printEnterCommand(w io.Writer, pid int) {
-	fmt.Fprintf(w, "%s %s", r.enterCommand.argv0, strings.Join(r.enterCommand.argv[1:], " "))
-	if pid > 0 {
-		fmt.Fprintf(w, " (pid %d)\n", pid)
-	} else {
-		fmt.Fprintf(w, "\n")
-	}
-}
-
 func (r *RunnerT) Execute() error {
 	// different functionality depending on options, see NewRunner()
 	switch {
@@ -557,7 +553,7 @@ func (r *RunnerT) Execute() error {
 				if err != nil {
 					return err
 				}
-				r.printEnterCommand(os.Stderr, 0)
+				r.enterCommand.Print(os.Stderr)
 			}
 		}
 	}
@@ -569,9 +565,9 @@ func (r *RunnerT) printFetchAndRun() {
 	// separate fetch is not working reliably, so hide it
 	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
 	if separateFetch {
-		r.printFetchCommand(os.Stderr)
+		r.fetchCommand.Print(os.Stderr)
 	}
-	r.printRunCommand(os.Stderr, 0)
+	r.runCommand.Print(os.Stderr)
 }
 
 // fetchAndRun fetches the image, and runs the command.
@@ -584,15 +580,10 @@ func (r *RunnerT) fetchAndRun() error {
 	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
 	if separateFetch {
 		if *r.args.options.verbose {
-			r.printFetchCommand(os.Stderr)
+			r.fetchCommand.Print(os.Stderr)
 		}
 
-		fetchCmd := exec.Command(r.fetchCommand.argv[0], r.fetchCommand.argv[1:]...)
-		fetchCmd.Path = r.fetchCommand.argv0
-		fetchCmd.Env = r.fetchCommand.envv
-		// for progress updates:
-		fetchCmd.Stderr = os.Stderr
-		err = fetchCmd.Run()
+		err = r.fetchCommand.Run()
 		if err != nil {
 			return err
 		}
@@ -623,16 +614,10 @@ func (r *RunnerT) fetchAndRun() error {
 	uuidPath := uuidFilePath()
 	defer os.Remove(uuidPath)
 
-	runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
-	runCmd.Path = r.runCommand.argv0
-	runCmd.Env = r.runCommand.envv
-	runCmd.Stdin = os.Stdin
-	runCmd.Stdout = os.Stdout
-	runCmd.Stderr = os.Stderr
-	err = runCmd.Start()
+	err = r.runCommand.Start()
 	if err == nil {
 		if *r.args.options.verbose {
-			r.printRunCommand(os.Stderr, runCmd.Process.Pid)
+			r.runCommand.Print(os.Stderr)
 		}
 
 		if r.config.WorkerPods {
@@ -654,7 +639,7 @@ func (r *RunnerT) fetchAndRun() error {
 			fmt.Fprintf(os.Stderr, "pod uuid is %s\n", r.uuid)
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
-			err = runCmd.Wait()
+			err = r.runCommand.Wait()
 		}
 
 		// ensure we don't print an error message if rkt run already did
@@ -666,7 +651,7 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 	} else {
 		if *r.args.options.verbose {
-			r.printRunCommand(os.Stderr, 0)
+			r.runCommand.Print(os.Stderr)
 		}
 	}
 
@@ -677,19 +662,13 @@ func (r *RunnerT) fetchAndRun() error {
 func (r *RunnerT) enter() error {
 	var err error
 
-	enterCmd := exec.Command(r.enterCommand.argv[0], r.enterCommand.argv[1:]...)
-	enterCmd.Path = r.enterCommand.argv0
-	enterCmd.Env = r.enterCommand.envv
-	enterCmd.Stdin = os.Stdin
-	enterCmd.Stdout = os.Stdout
-	enterCmd.Stderr = os.Stderr
-	err = enterCmd.Start()
+	err = r.enterCommand.Start()
 	if err == nil {
 		if *r.args.options.verbose {
-			r.printEnterCommand(os.Stderr, enterCmd.Process.Pid)
+			r.enterCommand.Print(os.Stderr)
 		}
 
-		err = enterCmd.Wait()
+		err = r.enterCommand.Wait()
 
 		// ensure we don't print an error message if rkt enter already did
 		if err != nil {
@@ -700,7 +679,7 @@ func (r *RunnerT) enter() error {
 		}
 	} else {
 		if *r.args.options.verbose {
-			r.printEnterCommand(os.Stderr, 0)
+			r.enterCommand.Print(os.Stderr)
 		}
 	}
 
