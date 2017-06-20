@@ -1,6 +1,7 @@
 rkt = "/usr/bin/rkt"
 preserve-cwd = true
 use-path = true
+worker-pods = true
 exec-slave-dir = "/usr/libexec/rktrunner"
 default-interactive-cmd = "sh"
 

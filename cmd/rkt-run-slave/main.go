@@ -19,7 +19,22 @@ func exists(path string) bool {
 	return !os.IsNotExist(err)
 }
 
+func waitForever() error {
+	r, _, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	buf := make([]byte, 1, 1)
+	_, err = r.Read(buf)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "warning: waitForever() returned unexpectedly\n")
+	return nil
+}
+
 func main() {
+	wait := goopt.Flag([]string{"--wait"}, []string{}, "wait forever", "")
 	cwd := goopt.String([]string{"--cwd"}, "", "run with current working directory")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
@@ -27,6 +42,13 @@ func main() {
 	goopt.Suite = "rktrunner"
 	goopt.Parse(nil)
 	args := goopt.Args
+
+	if *wait {
+		err := waitForever()
+		if err != nil {
+			die("%v", err)
+		}
+	}
 
 	if *cwd != "" {
 		err := os.Chdir(*cwd)

@@ -12,6 +12,7 @@ type configT struct {
 	Rkt                   string
 	PreserveCwd           bool              `toml:"preserve-cwd"`
 	UsePath               bool              `toml:"use-path"`
+	WorkerPods            bool              `toml:"worker-pods"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`

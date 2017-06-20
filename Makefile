@@ -14,6 +14,10 @@ rkt-run-helper:
 rkt-run-slave:
 	go install github.com/tesujimath/rktrunner/cmd/rkt-run-slave
 
+# test program:
+get-worker:
+	go install github.com/tesujimath/rktrunner/cmd/get-worker
+
 doc: doc/rkt-run.1.gz doc/rktrunner.toml.5.gz
 
 doc/%.gz: doc/%

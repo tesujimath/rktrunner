@@ -17,6 +17,10 @@ func masterRunDir() string {
 	return filepath.Join(masterRoot, fmt.Sprintf("runner-%d", os.Getpid()))
 }
 
+func workerPodDir(uuid string) string {
+	return filepath.Join(masterRoot, fmt.Sprintf("pod-%s", uuid))
+}
+
 func envFilePath() string {
 	return filepath.Join(masterRunDir(), "env")
 }

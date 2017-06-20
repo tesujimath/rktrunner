@@ -15,6 +15,8 @@
 Note: `use-path` is only useful when using *stage1-fly*, and is a work-around for
 [this issue](https://github.com/rkt/rkt/issues/3662).
 
+`worker-pods = ` *bool* `# run user/image applications within a single worker pod`
+
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
 ## environment

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -17,6 +18,7 @@ import (
 )
 
 var ErrRktRunFailed = errors.New("rkt run failed")
+var ErrRktEnterFailed = errors.New("rkt enter failed")
 
 type optionsT struct {
 	config        *string
@@ -60,6 +62,8 @@ type RunnerT struct {
 	exec             string
 	fetchCommand     commandT
 	runCommand       commandT
+	enterCommand     commandT
+	uuid             string
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -112,15 +116,16 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	case *r.args.options.listAlias:
 		// do nothing for now
 	default:
-		err = r.resolveImage()
-		if err != nil {
-			return nil, fmt.Errorf("bad usage: %v", err)
+		err = r.validateCmdArgs()
+		if err == nil {
+			err = r.resolveImage()
 		}
-		err = r.buildFetchCommand(mode)
-		if err != nil {
-			return nil, fmt.Errorf("bad usage: %v", err)
+		if err == nil {
+			err = r.buildFetchCommand(mode)
 		}
-		err = r.buildRunCommand(mode)
+		if err == nil {
+			err = r.buildRunCommand(mode)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
 		}
@@ -154,7 +159,7 @@ func (r *RunnerT) validateRequestedVolumes() error {
 
 // runSlave returns whether we need to run the slave
 func (r *RunnerT) runSlave() bool {
-	return r.config.PreserveCwd || r.config.UsePath
+	return r.config.PreserveCwd || r.config.UsePath || r.config.WorkerPods
 }
 
 func (r *RunnerT) autoPrefix(image string) string {
@@ -401,15 +406,22 @@ func (r *RunnerT) buildFetchCommand(mode string) error {
 	return nil
 }
 
+func (r *RunnerT) validateCmdArgs() error {
+	// check for ---
+	for _, arg := range r.args.cmdArgs {
+		if arg == "---" {
+			return fmt.Errorf("%s invalid", arg)
+		}
+	}
+	return nil
+}
+
 func (r *RunnerT) buildRunCommand(mode string) error {
 	argv0 := r.config.Rkt
 	argv := make([]string, 1)
 	argv[0] = filepath.Base(argv0)
 	argv = append(argv, r.fragments.formatOptions(mode, GeneralClass)...)
 	argv = append(argv, "run")
-	if *r.args.options.interactive {
-		argv = append(argv, "--interactive")
-	}
 
 	argv = append(argv, "--uuid-file-save", uuidFilePath())
 	argv = append(argv, "--set-env-file", envFilePath())
@@ -430,8 +442,12 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 			}
 			argv = append(argv, "--cwd", cwd)
 		}
-		if r.exec != "" {
-			argv = append(argv, r.exec)
+		if r.config.WorkerPods {
+			argv = append(argv, "--wait")
+		} else {
+			if r.exec != "" {
+				argv = append(argv, r.exec)
+			}
 		}
 	} else {
 		if r.exec != "" {
@@ -439,19 +455,43 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 		}
 	}
 
-	if len(r.args.cmdArgs) > 0 {
-		// check for ---
-		for _, arg := range r.args.cmdArgs {
-			if arg == "---" {
-				return fmt.Errorf("%s invalid", arg)
-			}
-		}
-
+	if !r.config.WorkerPods && len(r.args.cmdArgs) > 0 {
 		argv = append(argv, r.args.cmdArgs...)
 	}
+
 	r.runCommand.argv0 = argv0
 	r.runCommand.argv = argv
 	r.runCommand.envv = r.buildEnviron()
+	return nil
+}
+
+func (r *RunnerT) buildEnterCommand() error {
+	argv0 := r.config.Rkt
+	argv := make([]string, 1)
+	argv[0] = filepath.Base(argv0)
+	argv = append(argv, "enter", r.uuid)
+
+	if r.runSlave() {
+		argv = append(argv, filepath.Join(slaveBinDir, slaveRunner))
+		if r.config.PreserveCwd {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			argv = append(argv, "--cwd", cwd)
+		}
+	}
+
+	if r.exec != "" {
+		argv = append(argv, r.exec)
+	}
+
+	if len(r.args.cmdArgs) > 0 {
+		argv = append(argv, r.args.cmdArgs...)
+	}
+
+	r.enterCommand.argv0 = argv0
+	r.enterCommand.argv = argv
 	return nil
 }
 
@@ -478,6 +518,15 @@ func (r *RunnerT) printRunCommand(w io.Writer, pid int) {
 	}
 }
 
+func (r *RunnerT) printEnterCommand(w io.Writer, pid int) {
+	fmt.Fprintf(w, "%s %s", r.enterCommand.argv0, strings.Join(r.enterCommand.argv[1:], " "))
+	if pid > 0 {
+		fmt.Fprintf(w, " (pid %d)\n", pid)
+	} else {
+		fmt.Fprintf(w, "\n")
+	}
+}
+
 func (r *RunnerT) Execute() error {
 	// different functionality depending on options, see NewRunner()
 	switch {
@@ -486,9 +535,30 @@ func (r *RunnerT) Execute() error {
 
 	default:
 		if !*r.args.options.dryRun {
-			return r.fetchAndRun()
+			err := r.fetchAndRun()
+			if err != nil {
+				return err
+			}
+			if r.config.WorkerPods {
+				err = r.buildEnterCommand()
+				if err == nil {
+					err = r.enter()
+				}
+				if err != nil {
+					return err
+				}
+			}
 		} else if *r.args.options.verbose {
 			r.printFetchAndRun()
+			if r.config.WorkerPods {
+				// placeholder UUID for dry-run
+				r.uuid = "<uuid>"
+				err := r.buildEnterCommand()
+				if err != nil {
+					return err
+				}
+				r.printEnterCommand(os.Stderr, 0)
+			}
 		}
 	}
 	return nil
@@ -504,7 +574,9 @@ func (r *RunnerT) printFetchAndRun() {
 	r.printRunCommand(os.Stderr, 0)
 }
 
-// fetchAndRun fetches the image, and runs the command, waiting for it to complete
+// fetchAndRun fetches the image, and runs the command.
+// If it is a worker pod, the run is done in the background,
+// otherwise we wait for it to complete.
 func (r *RunnerT) fetchAndRun() error {
 	var err error
 
@@ -563,7 +635,27 @@ func (r *RunnerT) fetchAndRun() error {
 			r.printRunCommand(os.Stderr, runCmd.Process.Pid)
 		}
 
-		err = runCmd.Wait()
+		if r.config.WorkerPods {
+			// determine the pod UUID
+			err = awaitPath(uuidPath)
+			if err != nil {
+				return err
+			}
+			uuidFile, err := os.Open(uuidPath)
+			if err != nil {
+				return err
+			}
+			defer uuidFile.Close()
+			uuidBytes, err := ioutil.ReadAll(uuidFile)
+			if err != nil {
+				return err
+			}
+			r.uuid = string(uuidBytes)
+			fmt.Fprintf(os.Stderr, "pod uuid is %s\n", r.uuid)
+		} else {
+			// don't care about the UUID, just wait for the pod to exit
+			err = runCmd.Wait()
+		}
 
 		// ensure we don't print an error message if rkt run already did
 		if err != nil {
@@ -575,6 +667,40 @@ func (r *RunnerT) fetchAndRun() error {
 	} else {
 		if *r.args.options.verbose {
 			r.printRunCommand(os.Stderr, 0)
+		}
+	}
+
+	return err
+}
+
+// enter enters the pod
+func (r *RunnerT) enter() error {
+	var err error
+
+	enterCmd := exec.Command(r.enterCommand.argv[0], r.enterCommand.argv[1:]...)
+	enterCmd.Path = r.enterCommand.argv0
+	enterCmd.Env = r.enterCommand.envv
+	enterCmd.Stdin = os.Stdin
+	enterCmd.Stdout = os.Stdout
+	enterCmd.Stderr = os.Stderr
+	err = enterCmd.Start()
+	if err == nil {
+		if *r.args.options.verbose {
+			r.printEnterCommand(os.Stderr, enterCmd.Process.Pid)
+		}
+
+		err = enterCmd.Wait()
+
+		// ensure we don't print an error message if rkt enter already did
+		if err != nil {
+			_, isExitErr := err.(*exec.ExitError)
+			if isExitErr {
+				err = ErrRktEnterFailed
+			}
+		}
+	} else {
+		if *r.args.options.verbose {
+			r.printEnterCommand(os.Stderr, 0)
 		}
 	}
 
