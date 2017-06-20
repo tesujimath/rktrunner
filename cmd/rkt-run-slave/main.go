@@ -14,11 +14,6 @@ func die(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
-}
-
 func waitForever() error {
 	r, _, err := os.Pipe()
 	if err != nil {
