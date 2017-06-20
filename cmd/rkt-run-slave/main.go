@@ -64,7 +64,7 @@ func main() {
 	if len(args) > 0 {
 		argv0, err := exec.LookPath(args[0])
 		if err != nil {
-			die("%v", err)
+			die("%v PATH=%s", err, os.Getenv("PATH"))
 		}
 		err = syscall.Exec(argv0, args, os.Environ())
 		if err != nil {

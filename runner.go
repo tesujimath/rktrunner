@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -39,45 +38,6 @@ type argsT struct {
 	cmdArgs []string
 }
 
-type commandT struct {
-	argv0 string
-	argv  []string
-	envv  []string
-	cmd   *exec.Cmd
-}
-
-func (c *commandT) Print(w io.Writer) {
-	fmt.Fprintf(w, "%s %s", c.argv0, strings.Join(c.argv[1:], " "))
-	if c.cmd.Process != nil {
-		fmt.Fprintf(w, " (pid %d)\n", c.cmd.Process.Pid)
-	} else {
-		fmt.Fprintf(w, "\n")
-	}
-}
-
-func (c *commandT) create() {
-	c.cmd = exec.Command(c.argv[0], c.argv[1:]...)
-	c.cmd.Path = c.argv0
-	c.cmd.Env = c.envv
-	c.cmd.Stdin = os.Stdin
-	c.cmd.Stdout = os.Stdout
-	c.cmd.Stderr = os.Stderr
-}
-
-func (c *commandT) Run() error {
-	c.create()
-	return c.cmd.Run()
-}
-
-func (c *commandT) Start() error {
-	c.create()
-	return c.cmd.Start()
-}
-
-func (c *commandT) Wait() error {
-	return c.cmd.Wait()
-}
-
 type aliasT struct {
 	image string
 	exec  string
@@ -92,11 +52,10 @@ type RunnerT struct {
 	args             argsT
 	image            string
 	exec             string
-	fetchCommand     commandT
-	runCommand       commandT
-	enterCommand     commandT
+	fetchCommand     *CommandT
+	runCommand       *CommandT
+	enterCommand     *CommandT
 	worker           *Worker
-	uuid             string
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -156,15 +115,16 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		if err == nil && r.config.WorkerPods {
 			r.worker, err = NewWorker(u, r.image)
 		}
-		if err == nil {
+		// separate fetch is not working reliably, so hide it
+		_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
+		if err == nil && separateFetch {
 			err = r.buildFetchCommand(mode)
 		}
 		if err == nil {
-			if !r.config.WorkerPods || r.worker.UUID == "" {
+			if r.worker == nil || !r.worker.FoundPod() {
 				err = r.buildRunCommand(mode)
 			} else {
 				// reuse worker pod we found
-				r.uuid = r.worker.UUID
 				r.buildEnterCommand()
 			}
 		}
@@ -428,19 +388,12 @@ func (r *RunnerT) formatMounts() []string {
 }
 
 func (r *RunnerT) buildFetchCommand(mode string) error {
-	argv0 := r.config.Rkt
-	argv := make([]string, 1)
-	argv[0] = filepath.Base(argv0)
-	argv = append(argv, r.fragments.Options[mode][GeneralClass]...)
-	argv = append(argv, "fetch")
-
-	argv = append(argv, r.fragments.Options[mode][FetchClass]...)
-
-	argv = append(argv, r.image)
-
-	r.fetchCommand.argv0 = argv0
-	r.fetchCommand.argv = argv
-	r.fetchCommand.envv = os.Environ()
+	r.fetchCommand = NewCommand(r.config.Rkt)
+	r.fetchCommand.AppendArgs(r.fragments.Options[mode][GeneralClass]...)
+	r.fetchCommand.AppendArgs("fetch")
+	r.fetchCommand.AppendArgs(r.fragments.Options[mode][FetchClass]...)
+	r.fetchCommand.AppendArgs(r.image)
+	r.fetchCommand.SetEnviron(os.Environ())
 	return nil
 }
 
@@ -455,81 +408,83 @@ func (r *RunnerT) validateCmdArgs() error {
 }
 
 func (r *RunnerT) buildRunCommand(mode string) error {
-	argv0 := r.config.Rkt
-	argv := make([]string, 1)
-	argv[0] = filepath.Base(argv0)
-	argv = append(argv, r.fragments.formatOptions(mode, GeneralClass)...)
-	argv = append(argv, "run")
+	r.runCommand = NewCommand(r.config.Rkt)
+	r.runCommand.AppendArgs(r.fragments.formatOptions(mode, GeneralClass)...)
+	r.runCommand.AppendArgs("run")
 
-	argv = append(argv, "--uuid-file-save", uuidFilePath())
-	argv = append(argv, "--set-env-file", envFilePath())
-	argv = append(argv, r.fragments.formatOptions(mode, RunClass)...)
+	r.runCommand.AppendArgs("--uuid-file-save", uuidFilePath())
+	r.runCommand.AppendArgs("--set-env-file", envFilePath())
+	r.runCommand.AppendArgs(r.fragments.formatOptions(mode, RunClass)...)
 
-	argv = append(argv, r.formatVolumes()...)
-	argv = append(argv, r.image)
+	r.runCommand.AppendArgs(r.formatVolumes()...)
+	r.runCommand.AppendArgs(r.image)
 
-	argv = append(argv, r.formatMounts()...)
-	argv = append(argv, r.fragments.formatOptions(mode, ImageClass)...)
+	if r.worker != nil {
+		r.runCommand.AppendArgs("--name", r.worker.AppName)
+	}
+
+	r.runCommand.AppendArgs(r.formatMounts()...)
+	r.runCommand.AppendArgs(r.fragments.formatOptions(mode, ImageClass)...)
 
 	if r.runSlave() {
-		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
+		r.runCommand.AppendArgs("--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			argv = append(argv, "--cwd", cwd)
+			r.runCommand.AppendArgs("--cwd", cwd)
 		}
 		if r.config.WorkerPods {
-			argv = append(argv, "--wait")
+			r.runCommand.AppendArgs("--wait")
 		} else {
 			if r.exec != "" {
-				argv = append(argv, r.exec)
+				r.runCommand.AppendArgs(r.exec)
 			}
 		}
 	} else {
 		if r.exec != "" {
-			argv = append(argv, "--exec", r.exec, "--")
+			r.runCommand.AppendArgs("--exec", r.exec, "--")
 		}
 	}
 
 	if !r.config.WorkerPods && len(r.args.cmdArgs) > 0 {
-		argv = append(argv, r.args.cmdArgs...)
+		r.runCommand.AppendArgs(r.args.cmdArgs...)
 	}
 
-	r.runCommand.argv0 = argv0
-	r.runCommand.argv = argv
-	r.runCommand.envv = r.buildEnviron()
+	r.runCommand.SetEnviron(r.buildEnviron())
 	return nil
 }
 
 func (r *RunnerT) buildEnterCommand() error {
-	argv0 := r.config.Rkt
-	argv := make([]string, 1)
-	argv[0] = filepath.Base(argv0)
-	argv = append(argv, "enter", r.uuid)
+	r.enterCommand = NewCommand(r.config.Rkt)
+	r.enterCommand.AppendArgs("enter")
+	if r.worker.FoundPod() {
+		r.enterCommand.AppendArgs(r.worker.UUID)
+	} else {
+		// placeholder, just for verbose output
+		r.enterCommand.AppendArgs("$uuid")
+	}
 
 	if r.runSlave() {
-		argv = append(argv, filepath.Join(slaveBinDir, slaveRunner))
+		r.enterCommand.AppendArgs(filepath.Join(slaveBinDir, slaveRunner))
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			argv = append(argv, "--cwd", cwd)
+			r.enterCommand.AppendArgs("--cwd", cwd)
 		}
 	}
 
 	if r.exec != "" {
-		argv = append(argv, r.exec)
+		r.enterCommand.AppendArgs(r.exec)
 	}
 
 	if len(r.args.cmdArgs) > 0 {
-		argv = append(argv, r.args.cmdArgs...)
+		r.enterCommand.AppendArgs(r.args.cmdArgs...)
 	}
 
-	r.enterCommand.argv0 = argv0
-	r.enterCommand.argv = argv
 	return nil
 }
 
@@ -541,12 +496,14 @@ func (r *RunnerT) Execute() error {
 
 	default:
 		if !*r.args.options.dryRun {
-			err := r.fetchAndRun()
-			if err != nil {
-				return err
+			if r.runCommand != nil {
+				err := r.fetchAndRun()
+				if err != nil {
+					return err
+				}
 			}
 			if r.config.WorkerPods {
-				err = r.buildEnterCommand()
+				err := r.buildEnterCommand()
 				if err == nil {
 					err = r.enter()
 				}
@@ -557,8 +514,6 @@ func (r *RunnerT) Execute() error {
 		} else if *r.args.options.verbose {
 			r.printFetchAndRun()
 			if r.config.WorkerPods {
-				// placeholder UUID for dry-run
-				r.uuid = "<uuid>"
 				err := r.buildEnterCommand()
 				if err != nil {
 					return err
@@ -572,12 +527,12 @@ func (r *RunnerT) Execute() error {
 
 // printFetchAndRun just prints the commands which would be used
 func (r *RunnerT) printFetchAndRun() {
-	// separate fetch is not working reliably, so hide it
-	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
-	if separateFetch {
+	if r.fetchCommand != nil {
 		r.fetchCommand.Print(os.Stderr)
 	}
-	r.runCommand.Print(os.Stderr)
+	if r.runCommand != nil {
+		r.runCommand.Print(os.Stderr)
+	}
 }
 
 // fetchAndRun fetches the image, and runs the command.
@@ -586,9 +541,7 @@ func (r *RunnerT) printFetchAndRun() {
 func (r *RunnerT) fetchAndRun() error {
 	var err error
 
-	// separate fetch is not working reliably, so hide it
-	_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")
-	if separateFetch {
+	if r.fetchCommand != nil {
 		if *r.args.options.verbose {
 			r.fetchCommand.Print(os.Stderr)
 		}
@@ -631,25 +584,7 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 
 		if r.config.WorkerPods {
-			// determine the pod UUID
-			err = awaitPath(uuidPath)
-			if err != nil {
-				return err
-			}
-			uuidFile, err := os.Open(uuidPath)
-			if err != nil {
-				return err
-			}
-			defer uuidFile.Close()
-			uuidBytes, err := ioutil.ReadAll(uuidFile)
-			if err != nil {
-				return err
-			}
-			r.uuid = string(uuidBytes)
-			fmt.Fprintf(os.Stderr, "pod uuid is %s\n", r.uuid)
-
-			// now make the worker pod dir, which can be locked by users of the worker
-			err = os.MkdirAll(workerPodDir(r.uuid), 0755)
+			err = r.worker.InitializePod(uuidPath)
 			if err != nil {
 				return err
 			}
@@ -678,6 +613,8 @@ func (r *RunnerT) fetchAndRun() error {
 func (r *RunnerT) enter() error {
 	var err error
 
+	fmt.Fprintf(os.Stderr, "enter %v %v\n", r.enterCommand, r.worker)
+	r.enterCommand.PreserveFile(r.worker.Podlock)
 	err = r.enterCommand.Start()
 	if err == nil {
 		if *r.args.options.verbose {

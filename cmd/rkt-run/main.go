@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/tesujimath/rktrunner"
 	"os"
 	"syscall"
+
+	"github.com/tesujimath/rktrunner"
 )
 
 func die(format string, args ...interface{}) {
@@ -14,6 +15,8 @@ func die(format string, args ...interface{}) {
 
 func main() {
 	r, err := rktrunner.NewRunner("/etc/rktrunner.toml")
+	// for testing:
+	// r, err := rktrunner.NewRunner("/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner-experimental.toml")
 	if err != nil {
 		die("%v", err)
 	}

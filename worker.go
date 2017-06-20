@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
@@ -19,25 +20,88 @@ type Worker struct {
 	image   string
 	AppName string
 	UUID    string
+	Podlock *os.File
 }
 
 func NewWorker(u *user.User, image string) (*Worker, error) {
-	uid, err := strconv.Atoi(u.Uid)
+	var err error
+	w := &Worker{}
+
+	w.uid, err = strconv.Atoi(u.Uid)
 	if err != nil {
 		return nil, err
 	}
-	w := &Worker{
-		uid:     uid,
-		image:   image,
-		AppName: fmt.Sprintf("worker-%s", u.Username),
+
+	// need version suffix on image name, to match output of rkt list
+	if strings.ContainsRune(image, ':') {
+		w.image = image
+	} else {
+		w.image = fmt.Sprintf("%s:latest", image)
 	}
+
+	w.AppName = fmt.Sprintf("worker-%s", u.Username)
 
 	err = w.findPod()
 	if err != nil {
 		return nil, err
 	}
 
+	if w.FoundPod() {
+		fmt.Fprintf(os.Stderr, "worker reusing pod %s\n", w.UUID)
+	} else {
+		fmt.Fprintf(os.Stderr, "worker failed to find suitable pod\n")
+	}
+
 	return w, nil
+}
+
+// FoundPod returns whether we found (and locked) a suitable pod.
+func (w *Worker) FoundPod() bool {
+	return w.UUID != ""
+}
+
+// LockPod attempts to acquire a shared lock on the pod, without blocking.
+func (w *Worker) LockPod(uuid string) error {
+	podlock, err := os.Open(workerPodDir(uuid))
+	if err != nil {
+		return err
+	}
+	err = syscall.Flock(int(podlock.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+	if err != nil {
+		podlock.Close()
+		return err
+	}
+	w.UUID = uuid
+	w.Podlock = podlock
+	return nil
+}
+
+// InitializePod sets up a new pod for use as a worker, and locks it.
+func (w *Worker) InitializePod(uuidPath string) error {
+	// determine the pod UUID
+	err := awaitPath(uuidPath)
+	if err != nil {
+		return err
+	}
+	uuidFile, err := os.Open(uuidPath)
+	if err != nil {
+		return err
+	}
+	defer uuidFile.Close()
+	uuidBytes, err := ioutil.ReadAll(uuidFile)
+	if err != nil {
+		return err
+	}
+	uuid := string(uuidBytes)
+	fmt.Fprintf(os.Stderr, "newly initialized pod uuid is %s\n", uuid)
+
+	// create the worker pod dir, which can be locked by users of the worker
+	err = os.MkdirAll(workerPodDir(uuid), 0755)
+	if err != nil {
+		return err
+	}
+
+	return w.LockPod(uuid)
 }
 
 func (w *Worker) verifyPodUser(uuid string) error {
@@ -89,8 +153,7 @@ func (w *Worker) findPod() error {
 	}
 
 	scanner := bufio.NewScanner(stdout)
-	var uuid string
-	for scanner.Scan() && uuid == "" {
+	for scanner.Scan() && !w.FoundPod() {
 		fields := strings.Fields(scanner.Text())
 		if fields[1] == w.AppName && fields[2] == w.image && fields[4] == "running" {
 			candidateUUID := fields[0]
@@ -98,20 +161,9 @@ func (w *Worker) findPod() error {
 			if warn != nil {
 				fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 			} else {
-				// if we can lock the workerPodDir, we can use it
-				podlock, warn := os.Open(workerPodDir(candidateUUID))
+				warn := w.LockPod(candidateUUID)
 				if warn != nil {
 					fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
-				} else {
-					warn := syscall.Flock(int(podlock.Fd()), syscall.LOCK_SH)
-					if warn != nil {
-						fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
-						podlock.Close()
-					} else {
-						// We found a suitable pod, and locked it for use.
-						// Now we leave the podlock open, to retain the lock.
-						uuid = candidateUUID
-					}
 				}
 			}
 		}
@@ -127,6 +179,5 @@ func (w *Worker) findPod() error {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 	}
 
-	w.UUID = uuid
 	return nil
 }
