@@ -613,7 +613,6 @@ func (r *RunnerT) fetchAndRun() error {
 func (r *RunnerT) enter() error {
 	var err error
 
-	fmt.Fprintf(os.Stderr, "enter %v %v\n", r.enterCommand, r.worker)
 	r.enterCommand.PreserveFile(r.worker.Podlock)
 	err = r.enterCommand.Start()
 	if err == nil {

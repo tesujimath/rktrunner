@@ -39,17 +39,11 @@ func NewWorker(u *user.User, image string) (*Worker, error) {
 		w.image = fmt.Sprintf("%s:latest", image)
 	}
 
-	w.AppName = fmt.Sprintf("worker-%s", u.Username)
+	w.AppName = fmt.Sprintf("rktrunner-%s", u.Username)
 
 	err = w.findPod()
 	if err != nil {
 		return nil, err
-	}
-
-	if w.FoundPod() {
-		fmt.Fprintf(os.Stderr, "worker reusing pod %s\n", w.UUID)
-	} else {
-		fmt.Fprintf(os.Stderr, "worker failed to find suitable pod\n")
 	}
 
 	return w, nil
@@ -93,7 +87,6 @@ func (w *Worker) InitializePod(uuidPath string) error {
 		return err
 	}
 	uuid := string(uuidBytes)
-	fmt.Fprintf(os.Stderr, "newly initialized pod uuid is %s\n", uuid)
 
 	// create the worker pod dir, which can be locked by users of the worker
 	err = os.MkdirAll(workerPodDir(uuid), 0755)
