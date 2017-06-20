@@ -10,8 +10,6 @@ There are also `rkt-run-helper` and `rkt-run-slave` commands - see below.
 
 * enable unprivileged users to run rkt
 
-* attachment of stdin/stdout/stderr to container
-
 * preservation of working directory of host within container
 
 The system-wide configuration enables the system administrator to
@@ -89,6 +87,4 @@ puts 'Hello World from Ruby version ' + RUBY_VERSION
 ## rkt-run-slave
 
 `rkt-run-slave` is another wrapper, which runs within the container.
-It optionally waits for stdio attachment before running the target
-program, and also optionally changes to the working directory as on
-the host.
+It optionally changes to the working directory as on the host.

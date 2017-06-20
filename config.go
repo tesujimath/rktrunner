@@ -2,14 +2,14 @@ package rktrunner
 
 import (
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"os"
 	"path/filepath"
+
+	"github.com/BurntSushi/toml"
 )
 
 type configT struct {
 	Rkt                   string
-	AttachStdio           bool              `toml:"attach-stdio"`
 	PreserveCwd           bool              `toml:"preserve-cwd"`
 	UsePath               bool              `toml:"use-path"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
@@ -99,9 +99,6 @@ func GetConfig(path string, c *configT) error {
 		return fmt.Errorf("missing rkt")
 	}
 
-	if c.AttachStdio && c.ExecSlaveDir == "" {
-		return fmt.Errorf("attach-stdio requires exec-slave-dir")
-	}
 	if c.PreserveCwd && c.ExecSlaveDir == "" {
 		return fmt.Errorf("preserve-stdio requires exec-slave-dir")
 	}

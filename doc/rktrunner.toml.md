@@ -8,8 +8,6 @@
 
 `default-interactive-cmd = ` *string* `# shell for interactive containers`
 
-`attach-stdio = ` *bool* `# whether to use experimental rkt attach for stdin,stdout,stderr streams`
-
 `preserve-cwd = ` *bool* `# whether to change to the host working directory in the container`
 
 `use-path = ` *bool* `# whether to use the container path to find the entry point`
@@ -74,7 +72,6 @@ The following template variables may be used, in addition to any environment var
 # EXAMPLE
 ```
 rkt = "/usr/bin/rkt"
-attach-stdio = true
 preserve-cwd = true
 exec-slave-dir = "/usr/libexec/rktrunner"
 default-interactive-cmd = "sh"

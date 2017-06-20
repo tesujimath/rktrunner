@@ -100,10 +100,6 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
 
-	if r.attachStdio() {
-		r.environExtra["RKT_EXPERIMENT_ATTACH"] = "true"
-	}
-
 	var mode string
 	if *r.args.options.interactive {
 		mode = InteractiveMode
@@ -156,15 +152,9 @@ func (r *RunnerT) validateRequestedVolumes() error {
 	return nil
 }
 
-// attachStdio returns whether we need to attach stdio,
-// which we don't do in interactive mode
-func (r *RunnerT) attachStdio() bool {
-	return r.config.AttachStdio && !*r.args.options.interactive
-}
-
 // runSlave returns whether we need to run the slave
 func (r *RunnerT) runSlave() bool {
-	return r.attachStdio() || r.config.PreserveCwd || r.config.UsePath
+	return r.config.PreserveCwd || r.config.UsePath
 }
 
 func (r *RunnerT) autoPrefix(image string) string {
@@ -381,10 +371,6 @@ func (r *RunnerT) formatVolumes() []string {
 	if r.runSlave() {
 		volumes = append(volumes,
 			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
-		if r.attachStdio() {
-			volumes = append(volumes,
-				"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveRunVolume, masterRunDir()))
-		}
 	}
 	return volumes
 }
@@ -394,10 +380,6 @@ func (r *RunnerT) formatMounts() []string {
 	if r.runSlave() {
 		mounts = append(mounts,
 			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveBinVolume, slaveBinDir))
-		if r.attachStdio() {
-			mounts = append(mounts,
-				"--mount", fmt.Sprintf("volume=%s,target=%s", slaveRunVolume, slaveRunDir))
-		}
 	}
 	return mounts
 }
@@ -429,27 +411,18 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 		argv = append(argv, "--interactive")
 	}
 
-	if r.attachStdio() {
-		argv = append(argv, "--uuid-file-save", uuidFilePath())
-	}
+	argv = append(argv, "--uuid-file-save", uuidFilePath())
 	argv = append(argv, "--set-env-file", envFilePath())
 	argv = append(argv, r.fragments.formatOptions(mode, RunClass)...)
 
 	argv = append(argv, r.formatVolumes()...)
 	argv = append(argv, r.image)
 
-	if r.attachStdio() {
-		argv = append(argv, "--stdin=stream", "--stdout=stream", "--stderr=stream")
-	}
-
 	argv = append(argv, r.formatMounts()...)
 	argv = append(argv, r.fragments.formatOptions(mode, ImageClass)...)
 
 	if r.runSlave() {
 		argv = append(argv, "--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
-		if r.attachStdio() {
-			argv = append(argv, "--await-file", filepath.Join(slaveRunDir, attachReadyFile))
-		}
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -556,7 +529,6 @@ func (r *RunnerT) fetchAndRun() error {
 	// the master rundir is used for:
 	// - environment file
 	// - uuid file
-	// - attached inotify to slave
 	rundir := masterRunDir()
 	err = os.MkdirAll(rundir, 0755)
 	if err != nil {
@@ -576,26 +548,14 @@ func (r *RunnerT) fetchAndRun() error {
 	}
 	defer os.Remove(envPath)
 
-	attachReadyPath := filepath.Join(rundir, attachReadyFile)
-	var attach *Attacher
-	if r.attachStdio() {
-		uuidPath := uuidFilePath()
-		defer os.Remove(uuidPath)
-		attach, err = NewAttacher(uuidPath, attachReadyPath, r.runCommand.envv, *r.args.options.verbose)
-		if err != nil {
-			return err
-		}
-		go attach.Attach()
-		defer os.Remove(attachReadyPath)
-	}
+	uuidPath := uuidFilePath()
+	defer os.Remove(uuidPath)
 
 	runCmd := exec.Command(r.runCommand.argv[0], r.runCommand.argv[1:]...)
 	runCmd.Path = r.runCommand.argv0
 	runCmd.Env = r.runCommand.envv
-	if !r.attachStdio() {
-		runCmd.Stdin = os.Stdin
-		runCmd.Stdout = os.Stdout
-	}
+	runCmd.Stdin = os.Stdin
+	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	err = runCmd.Start()
 	if err == nil {
@@ -615,18 +575,6 @@ func (r *RunnerT) fetchAndRun() error {
 	} else {
 		if *r.args.options.verbose {
 			r.printRunCommand(os.Stderr, 0)
-		}
-	}
-
-	if r.attachStdio() {
-		if err != nil {
-			attach.Abort()
-		}
-
-		// report any error from attach, then discard it
-		warn := attach.Wait()
-		if warn != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", warn)
 		}
 	}
 
