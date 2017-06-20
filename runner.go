@@ -95,6 +95,7 @@ type RunnerT struct {
 	fetchCommand     commandT
 	runCommand       commandT
 	enterCommand     commandT
+	worker           *Worker
 	uuid             string
 }
 
@@ -152,11 +153,20 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		if err == nil {
 			err = r.resolveImage()
 		}
+		if err == nil && r.config.WorkerPods {
+			r.worker, err = NewWorker(u, r.image)
+		}
 		if err == nil {
 			err = r.buildFetchCommand(mode)
 		}
 		if err == nil {
-			err = r.buildRunCommand(mode)
+			if !r.config.WorkerPods || r.worker.UUID == "" {
+				err = r.buildRunCommand(mode)
+			} else {
+				// reuse worker pod we found
+				r.uuid = r.worker.UUID
+				r.buildEnterCommand()
+			}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
@@ -637,6 +647,12 @@ func (r *RunnerT) fetchAndRun() error {
 			}
 			r.uuid = string(uuidBytes)
 			fmt.Fprintf(os.Stderr, "pod uuid is %s\n", r.uuid)
+
+			// now make the worker pod dir, which can be locked by users of the worker
+			err = os.MkdirAll(workerPodDir(r.uuid), 0755)
+			if err != nil {
+				return err
+			}
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()

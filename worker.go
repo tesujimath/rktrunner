@@ -9,23 +9,38 @@ import (
 	"os/user"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/appc/spec/schema"
 )
 
 type Worker struct {
+	uid     int
+	image   string
+	AppName string
+	UUID    string
 }
 
-func workerAppName(uid int) string {
-	u, err := user.LookupId(strconv.Itoa(uid))
+func NewWorker(u *user.User, image string) (*Worker, error) {
+	uid, err := strconv.Atoi(u.Uid)
 	if err != nil {
-		return fmt.Sprintf("worker-%d", uid)
-	} else {
-		return fmt.Sprintf("worker-%s", u.Username)
+		return nil, err
 	}
+	w := &Worker{
+		uid:     uid,
+		image:   image,
+		AppName: fmt.Sprintf("worker-%s", u.Username),
+	}
+
+	err = w.findPod()
+	if err != nil {
+		return nil, err
+	}
+
+	return w, nil
 }
 
-func verifyPodUser(uuid string, uid int) error {
+func (w *Worker) verifyPodUser(uuid string) error {
 	cmd := exec.Command("rkt", "cat-manifest", uuid)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -53,62 +68,65 @@ func verifyPodUser(uuid string, uid int) error {
 	}
 	ra := pm.Apps[0]
 
-	if ra.App.User != strconv.Itoa(uid) {
-		return fmt.Errorf("unexpected pod manifest user %s, expected %d", ra.App.User, uid)
+	if ra.App.User != strconv.Itoa(w.uid) {
+		return fmt.Errorf("unexpected pod manifest user %s, expected %d", ra.App.User, w.uid)
 	}
 
 	return nil
 }
 
-// findWorker finds the UUID for a worker, if any
-func findWorker(image string, uid int) (string, error) {
-	name := workerAppName(uid)
+// findPod finds the UUID for a worker pod, if any
+func (w *Worker) findPod() error {
 	cmd := exec.Command("rkt", "list", "--full", "--no-legend")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	err = cmd.Start()
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	scanner := bufio.NewScanner(stdout)
 	var uuid string
 	for scanner.Scan() && uuid == "" {
 		fields := strings.Fields(scanner.Text())
-		if fields[1] == name && fields[2] == image && fields[4] == "running" {
-			candidateUuid := fields[0]
-			warn := verifyPodUser(candidateUuid, uid)
+		if fields[1] == w.AppName && fields[2] == w.image && fields[4] == "running" {
+			candidateUUID := fields[0]
+			warn := w.verifyPodUser(candidateUUID)
 			if warn != nil {
 				fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 			} else {
-				uuid = candidateUuid
+				// if we can lock the workerPodDir, we can use it
+				podlock, warn := os.Open(workerPodDir(candidateUUID))
+				if warn != nil {
+					fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
+				} else {
+					warn := syscall.Flock(int(podlock.Fd()), syscall.LOCK_SH)
+					if warn != nil {
+						fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
+						podlock.Close()
+					} else {
+						// We found a suitable pod, and locked it for use.
+						// Now we leave the podlock open, to retain the lock.
+						uuid = candidateUUID
+					}
+				}
 			}
 		}
 	}
 
 	scannerErr := scanner.Err()
-	err = cmd.Wait()
-	// ensure we return scanner error if something went wrong
-	if err == nil && scannerErr != nil {
-		err = scannerErr
+	warn := cmd.Wait()
+	// ensure we warn if something went wrong
+	if warn == nil && scannerErr != nil {
+		warn = scannerErr
 	}
-	if err != nil {
-		return "", err
+	if warn != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 	}
 
-	return uuid, nil
-}
-
-func GetWorker(image string, uid int) (string, error) {
-	uuid, err := findWorker(image, uid)
-	if err != nil {
-		return "", err
-	}
-	// if uuid == "" {
-	// 	uuid, err := startWorker(uid, image)
-	// }
-	return uuid, nil
+	w.UUID = uuid
+	return nil
 }
