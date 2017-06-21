@@ -1,7 +1,6 @@
 package rktrunner
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,6 +13,8 @@ import (
 
 	"github.com/appc/spec/schema"
 )
+
+const WORKER_APPNAME_PREFIX = "rktrunner-"
 
 type Worker struct {
 	uid     int
@@ -39,12 +40,9 @@ func NewWorker(u *user.User, image string) (*Worker, error) {
 		w.image = fmt.Sprintf("%s:latest", image)
 	}
 
-	w.AppName = fmt.Sprintf("rktrunner-%s", u.Username)
+	w.AppName = fmt.Sprintf("%s%s", WORKER_APPNAME_PREFIX, u.Username)
 
-	err = w.findPod()
-	if err != nil {
-		return nil, err
-	}
+	w.findPod()
 
 	return w, nil
 }
@@ -56,7 +54,7 @@ func (w *Worker) FoundPod() bool {
 
 // LockPod attempts to acquire a shared lock on the pod, without blocking.
 func (w *Worker) LockPod(uuid string) error {
-	podlock, err := os.Open(workerPodDir(uuid))
+	podlock, err := os.Open(WorkerPodDir(uuid))
 	if err != nil {
 		return err
 	}
@@ -89,7 +87,7 @@ func (w *Worker) InitializePod(uuidPath string) error {
 	uuid := string(uuidBytes)
 
 	// create the worker pod dir, which can be locked by users of the worker
-	err = os.MkdirAll(workerPodDir(uuid), 0755)
+	err = os.MkdirAll(WorkerPodDir(uuid), 0755)
 	if err != nil {
 		return err
 	}
@@ -133,44 +131,22 @@ func (w *Worker) verifyPodUser(uuid string) error {
 }
 
 // findPod finds the UUID for a worker pod, if any
-func (w *Worker) findPod() error {
-	cmd := exec.Command("rkt", "list", "--full", "--no-legend")
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-
-	err = cmd.Start()
-	if err != nil {
-		return err
-	}
-
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() && !w.FoundPod() {
-		fields := strings.Fields(scanner.Text())
-		if fields[1] == w.AppName && fields[2] == w.image && fields[4] == "running" {
-			candidateUUID := fields[0]
-			warn := w.verifyPodUser(candidateUUID)
+func (w *Worker) findPod() {
+	warn := VisitPods(func(pod *VisitedPod) bool {
+		if pod.AppName == w.AppName && pod.Image == w.image && pod.Status == "running" {
+			warn := w.verifyPodUser(pod.UUID)
 			if warn != nil {
 				fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 			} else {
-				warn := w.LockPod(candidateUUID)
+				warn := w.LockPod(pod.UUID)
 				if warn != nil {
 					fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 				}
 			}
 		}
-	}
-
-	scannerErr := scanner.Err()
-	warn := cmd.Wait()
-	// ensure we warn if something went wrong
-	if warn == nil && scannerErr != nil {
-		warn = scannerErr
-	}
+		return !w.FoundPod()
+	})
 	if warn != nil {
 		fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
 	}
-
-	return nil
 }
