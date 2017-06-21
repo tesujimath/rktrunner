@@ -10,6 +10,8 @@ There are also `rkt-run-helper` and `rkt-run-slave` commands - see below.
 
 * enable unprivileged users to run rkt
 
+* enable concurrent use of pods
+
 * preservation of working directory of host within container
 
 The system-wide configuration enables the system administrator to
@@ -66,6 +68,20 @@ image = "quay.io/biocontainers/qiime:1.9.1--py27_0"
 
 For further information, see the manpages for [rkt-run](doc/rkt-run.md)
 and [rktrunner.toml](doc/rktrunner.toml.md)
+
+## Concurrent use of pods
+
+The configuration option `worker-pods` may be used to enable concurrent use of pods.  This is an optimisation, useful when large numbers of concurrent application processes are required.  For each user and image, a single pod may be shared across all the application instances, by means of `rkt enter`.
+
+When using `worker-pods`, it is important to remove idle workers using `rktrunner-gc`, which should be run regularly as root.
+
+Note that this feature is unlikely to be useful without the following `rkt` issues being addressed.
+
+* [fly: enter should honor uid/gid/supp-gid #3392](https://github.com/rkt/rkt/issues/3392)
+
+* [fly: enter should honor env variables #3393](https://github.com/rkt/rkt/issues/3393)
+
+These are expected to be fixed in rkt 1.28.0.
 
 ## rkt-run-helper
 
