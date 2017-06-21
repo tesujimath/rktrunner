@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 type CommandT struct {
@@ -48,7 +49,7 @@ func (c *CommandT) SetEnviron(envv []string) {
 
 func (c *CommandT) Print(w io.Writer) {
 	fmt.Fprintf(w, "%s %s", c.argv0, strings.Join(c.argv[1:], " "))
-	if c.cmd.Process != nil {
+	if c.cmd != nil && c.cmd.Process != nil {
 		fmt.Fprintf(w, " (pid %d)\n", c.cmd.Process.Pid)
 	} else {
 		fmt.Fprintf(w, "\n")
@@ -81,4 +82,15 @@ func (c *CommandT) Start() error {
 
 func (c *CommandT) Wait() error {
 	return c.cmd.Wait()
+}
+
+func (c *CommandT) Exec() error {
+	for _, f := range c.extraFiles {
+		// clear O_CLOEXEC which is set by default
+		_, _, err := syscall.Syscall(syscall.SYS_FCNTL, f.Fd(), syscall.F_SETFD, 0)
+		if err != syscall.Errno(0x0) {
+			fmt.Fprintf(os.Stderr, "warning: ", err)
+		}
+	}
+	return syscall.Exec(c.argv0, c.argv, c.envv)
 }

@@ -623,31 +623,11 @@ func (r *RunnerT) fetchAndRun() error {
 	return err
 }
 
-// enter enters the pod
+// enter enters the pod, and if successful, does not return
 func (r *RunnerT) enter() error {
-	var err error
-
-	r.enterCommand.PreserveFile(r.worker.Podlock)
-	err = r.enterCommand.Start()
-	if err == nil {
-		if *r.args.options.verbose {
-			r.enterCommand.Print(os.Stderr)
-		}
-
-		err = r.enterCommand.Wait()
-
-		// ensure we don't print an error message if rkt enter already did
-		if err != nil {
-			_, isExitErr := err.(*exec.ExitError)
-			if isExitErr {
-				err = ErrRktEnterFailed
-			}
-		}
-	} else {
-		if *r.args.options.verbose {
-			r.enterCommand.Print(os.Stderr)
-		}
+	if *r.args.options.verbose {
+		r.enterCommand.Print(os.Stderr)
 	}
-
-	return err
+	r.enterCommand.PreserveFile(r.worker.Podlock)
+	return r.enterCommand.Exec()
 }
