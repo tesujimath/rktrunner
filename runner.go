@@ -449,7 +449,7 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 			}
 			r.runCommand.AppendArgs("--cwd", cwd)
 		}
-		if r.config.WorkerPods {
+		if r.worker != nil {
 			r.runCommand.AppendArgs("--wait")
 		} else {
 			if r.exec != "" {
@@ -462,7 +462,7 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 		}
 	}
 
-	if !r.config.WorkerPods && len(r.args.cmdArgs) > 0 {
+	if r.worker == nil && len(r.args.cmdArgs) > 0 {
 		r.runCommand.AppendArgs(r.args.cmdArgs...)
 	}
 
@@ -516,7 +516,7 @@ func (r *RunnerT) Execute() error {
 					return err
 				}
 			}
-			if r.config.WorkerPods {
+			if r.worker != nil {
 				err := r.buildEnterCommand()
 				if err == nil {
 					err = r.enter()
@@ -527,7 +527,7 @@ func (r *RunnerT) Execute() error {
 			}
 		} else if *r.args.options.verbose {
 			r.printFetchAndRun()
-			if r.config.WorkerPods {
+			if r.worker != nil {
 				err := r.buildEnterCommand()
 				if err != nil {
 					return err
@@ -597,7 +597,7 @@ func (r *RunnerT) fetchAndRun() error {
 			r.runCommand.Print(os.Stderr)
 		}
 
-		if r.config.WorkerPods {
+		if r.worker != nil {
 			err = r.worker.InitializePod(uuidPath)
 			if err != nil {
 				return err
