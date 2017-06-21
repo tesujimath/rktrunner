@@ -146,21 +146,15 @@ func (w *Worker) verifyPodUser(uuid string) error {
 
 // findPod finds the UUID for a worker pod, if any
 func (w *Worker) findPod() {
-	warn := VisitPods(func(pod *VisitedPod) bool {
+	WarnOnFailure(VisitPods(func(pod *VisitedPod) bool {
 		if pod.AppName == w.AppName && pod.Image == w.image && pod.Status == "running" {
-			warn := w.verifyPodUser(pod.UUID)
-			if warn != nil {
-				fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
+			err := w.verifyPodUser(pod.UUID)
+			if err != nil {
+				WarnError(err)
 			} else {
-				warn := w.LockPod(pod.UUID)
-				if warn != nil {
-					fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
-				}
+				WarnOnFailure(w.LockPod(pod.UUID))
 			}
 		}
 		return !w.FoundPod()
-	})
-	if warn != nil {
-		fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
-	}
+	}))
 }

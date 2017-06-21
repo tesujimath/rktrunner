@@ -71,6 +71,8 @@ func main() {
 				err = stopPod(pod.UUID)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "pod %s warning: %v\n", pod.UUID, err)
+				} else {
+					os.Remove(rktrunner.WorkerPodDir(pod.UUID))
 				}
 			}
 		}

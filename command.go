@@ -81,7 +81,10 @@ func (c *CommandT) Start() error {
 }
 
 func (c *CommandT) Wait() error {
-	return c.cmd.Wait()
+	if c.cmd != nil {
+		return c.cmd.Wait()
+	}
+	return nil
 }
 
 func (c *CommandT) Exec() error {
@@ -89,7 +92,7 @@ func (c *CommandT) Exec() error {
 		// clear O_CLOEXEC which is set by default
 		_, _, err := syscall.Syscall(syscall.SYS_FCNTL, f.Fd(), syscall.F_SETFD, 0)
 		if err != syscall.Errno(0x0) {
-			fmt.Fprintf(os.Stderr, "warning: ", err)
+			WarnError(err)
 		}
 	}
 	return syscall.Exec(c.argv0, c.argv, c.envv)

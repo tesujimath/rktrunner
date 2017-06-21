@@ -30,6 +30,7 @@ import (
 	"github.com/droundy/goopt"
 )
 
+var ErrNotRoot = errors.New("must run as root")
 var ErrRktRunFailed = errors.New("rkt run failed")
 var ErrRktEnterFailed = errors.New("rkt enter failed")
 
@@ -510,6 +511,10 @@ func (r *RunnerT) Execute() error {
 
 	default:
 		if !*r.args.options.dryRun {
+			if syscall.Getuid() != 0 || syscall.Geteuid() != 0 {
+				return ErrNotRoot
+			}
+
 			if r.runCommand != nil {
 				err := r.fetchAndRun()
 				if err != nil {
@@ -518,9 +523,11 @@ func (r *RunnerT) Execute() error {
 			}
 			if r.worker != nil {
 				err := r.buildEnterCommand()
-				if err == nil {
-					err = r.enter()
+				if err != nil {
+					return err
 				}
+
+				err = r.enter()
 				if err != nil {
 					return err
 				}
@@ -569,27 +576,16 @@ func (r *RunnerT) fetchAndRun() error {
 	// the master rundir is used for:
 	// - environment file
 	// - uuid file
-	rundir := masterRunDir()
-	err = os.MkdirAll(rundir, 0755)
+	err = os.MkdirAll(masterRunDir(), 0755)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		warn := os.Remove(rundir)
-		if warn != nil {
-			fmt.Fprintf(os.Stderr, "warning: %v\n", warn)
-		}
-	}()
 
 	envPath := envFilePath()
 	err = r.createEnvFile(envPath)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(envPath)
-
-	uuidPath := uuidFilePath()
-	defer os.Remove(uuidPath)
 
 	err = r.runCommand.Start()
 	if err == nil {
@@ -598,13 +594,15 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 
 		if r.worker != nil {
-			err = r.worker.InitializePod(uuidPath)
+			err = r.worker.InitializePod(uuidFilePath())
+			r.RemoveTempFiles()
 			if err != nil {
 				return err
 			}
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()
+			r.RemoveTempFiles()
 		}
 
 		// ensure we don't print an error message if rkt run already did
@@ -623,11 +621,24 @@ func (r *RunnerT) fetchAndRun() error {
 	return err
 }
 
-// enter enters the pod, and if successful, does not return
+func (r *RunnerT) RemoveTempFiles() {
+	os.Remove(uuidFilePath())
+	WarnOnFailure(os.Remove(envFilePath()))
+	WarnOnFailure(os.Remove(masterRunDir()))
+}
+
+// enter enters the pod.  In the case of not having also started the pod,
+// if successful, it does not return.
 func (r *RunnerT) enter() error {
 	if *r.args.options.verbose {
 		r.enterCommand.Print(os.Stderr)
 	}
 	r.enterCommand.PreserveFile(r.worker.Podlock)
-	return r.enterCommand.Exec()
+	// if we also started a pod, then simply run the enter command
+	if r.runCommand != nil {
+		// need to stay for the cleanup
+		return r.enterCommand.Run()
+	} else {
+		return r.enterCommand.Exec()
+	}
 }
