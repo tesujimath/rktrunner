@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"syscall"
 
 	"github.com/tesujimath/rktrunner"
@@ -34,6 +35,15 @@ func main() {
 	if err != nil {
 		die("%v", err)
 	}
+
+	// ensure we cleanup on interrupt
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM)
+	go func() {
+		<-c
+		r.RemoveTempFiles()
+		os.Exit(1)
+	}()
 
 	// set real uid same as effective
 	err = syscall.Setreuid(syscall.Geteuid(), syscall.Geteuid())
