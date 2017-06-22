@@ -580,6 +580,7 @@ func (r *RunnerT) fetchAndRun() error {
 	if err != nil {
 		return err
 	}
+	defer r.RemoveTempFiles()
 
 	envPath := envFilePath()
 	err = r.createEnvFile(envPath)
@@ -595,14 +596,12 @@ func (r *RunnerT) fetchAndRun() error {
 
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath())
-			r.RemoveTempFiles()
 			if err != nil {
 				return err
 			}
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()
-			r.RemoveTempFiles()
 		}
 
 		// ensure we don't print an error message if rkt run already did
