@@ -595,10 +595,7 @@ func (r *RunnerT) fetchAndRun() error {
 		}
 
 		if r.worker != nil {
-			err = r.worker.InitializePod(uuidFilePath())
-			if err != nil {
-				return err
-			}
+			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()

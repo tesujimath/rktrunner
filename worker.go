@@ -83,12 +83,22 @@ func (w *Worker) LockPod(uuid string) error {
 }
 
 // InitializePod sets up a new pod for use as a worker, and locks it.
-func (w *Worker) InitializePod(uuidPath string) error {
-	// determine the pod UUID
-	err := awaitPath(uuidPath)
-	if err != nil {
-		return err
+func (w *Worker) InitializePod(uuidPath string, cmdWaiter chan error) error {
+	// wait for the UUID file, or the cmd itself to finish (e.g. on failure)
+	pathWaiter := NewPathWaiter(uuidPath)
+	select {
+	case err := <-pathWaiter:
+		if err != nil {
+			return err
+		}
+
+	case err := <-cmdWaiter:
+		if err != nil {
+			return err
+		}
 	}
+
+	// determine the pod UUID
 	uuidFile, err := os.Open(uuidPath)
 	if err != nil {
 		return err

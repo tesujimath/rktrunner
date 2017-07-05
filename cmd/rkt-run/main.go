@@ -40,9 +40,15 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM)
 	go func() {
-		<-c
-		r.RemoveTempFiles()
-		os.Exit(1)
+		for {
+			s := <-c
+			// We can't simply signal.Ignore(syscall.SIGINT), as that would
+			// inhibit child processes from receiving it, so we disregard it here.
+			if s != syscall.SIGINT {
+				r.RemoveTempFiles()
+				os.Exit(1)
+			}
+		}
 	}()
 
 	// set real uid same as effective

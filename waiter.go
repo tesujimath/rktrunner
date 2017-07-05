@@ -14,47 +14,20 @@
 
 package rktrunner
 
-import (
-	"os"
-	"path/filepath"
-
-	"github.com/rjeczalik/notify"
-)
-
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+type Waitable interface {
+	Wait() error
 }
 
-// NewPathWaiter waits until the path appears
-func NewPathWaiter(path string) chan error {
+// NewWaiter wraps a simple Wait() call in a goroutine,
+// so multiple events can be awaited using select.
+func NewWaiter(w Waitable) chan error {
 	c := make(chan error)
 	go func() {
-		awaitDirEvents := make(chan notify.EventInfo, 2)
-		err := notify.Watch(filepath.Dir(path), awaitDirEvents, notify.InCloseWrite)
+		err := w.Wait()
 		if err != nil {
 			c <- err
-			close(c)
-			return
 		}
-		defer notify.Stop(awaitDirEvents)
-
-		// check after creating awaitDirEvents, to avoid race
-		if exists(path) {
-			close(c)
-			return
-		}
-
-		for {
-			switch ei := <-awaitDirEvents; ei.Event() {
-			case notify.InCloseWrite:
-				if exists(path) {
-					close(c)
-					return
-				}
-			}
-		}
-		// unreached
+		close(c)
 	}()
 	return c
 }
