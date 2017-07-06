@@ -21,6 +21,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/droundy/goopt"
 	"github.com/tesujimath/rktrunner"
 )
 
@@ -42,8 +43,8 @@ func lockPod(uuid string) (*os.File, error) {
 	return podlock, nil
 }
 
-func stopPod(uuid string) error {
-	args := []string{"rkt", "stop", uuid}
+func stopPod(pod *rktrunner.VisitedPod) error {
+	args := []string{"rkt", "stop", pod.UUID}
 	argv0, err := exec.LookPath(args[0])
 	if err != nil {
 		die("%v PATH=%s", err, os.Getenv("PATH"))
@@ -51,29 +52,41 @@ func stopPod(uuid string) error {
 	cmd := exec.Command(argv0, args[1:]...)
 	err = cmd.Run()
 	if err == nil {
-		fmt.Fprintf(os.Stderr, "stopping inactive pod %s\n", uuid)
+		fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
 	}
 	return err
 }
 
 func main() {
+	dryRun := goopt.Flag([]string{"--dry-run"}, []string{}, "don't execute anything", "")
+	goopt.RequireOrder = true
+	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
+	goopt.Summary = "rktrunner worker pod garbage collector"
+	goopt.Suite = "rktrunner"
+	goopt.Parse(nil)
+
 	err := rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
 		if pod.Status == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
 			podlock, err := lockPod(pod.UUID)
 			if err != nil {
 				errno, isErrno := err.(syscall.Errno)
 				if isErrno && errno == syscall.EAGAIN {
-					fmt.Fprintf(os.Stderr, "skipping active pod %s\n", pod.UUID)
+					fmt.Fprintf(os.Stderr, "skip busy %s\n", pod)
 				} else {
-					fmt.Fprintf(os.Stderr, "pod %s warning: %v %T\n", pod.UUID, err, err)
+					fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
 				}
 			} else if podlock != nil {
-				err = stopPod(pod.UUID)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "pod %s warning: %v\n", pod.UUID, err)
+				if *dryRun {
+					fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
 				} else {
-					os.Remove(rktrunner.WorkerPodDir(pod.UUID))
+					err = stopPod(pod)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
+					} else {
+						os.Remove(rktrunner.WorkerPodDir(pod.UUID))
+					}
 				}
+				podlock.Close()
 			}
 		}
 		return true

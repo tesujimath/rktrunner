@@ -16,6 +16,7 @@ package rktrunner
 
 import (
 	"bufio"
+	"fmt"
 	"os/exec"
 	"strings"
 )
@@ -25,6 +26,10 @@ type VisitedPod struct {
 	AppName string
 	Image   string
 	Status  string
+}
+
+func (p *VisitedPod) String() string {
+	return fmt.Sprintf("%s %s pod %s for %s", p.AppName, p.Status, p.UUID, p.Image)
 }
 
 // VisitPods visits all pods, until the walker returns false.
