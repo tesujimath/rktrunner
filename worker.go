@@ -157,7 +157,7 @@ func (w *Worker) verifyPodUser(uuid string) error {
 // findPod finds the UUID for a worker pod, if any
 func (w *Worker) findPod() {
 	WarnOnFailure(VisitPods(func(pod *VisitedPod) bool {
-		if pod.AppName == w.AppName && pod.Image == w.image && pod.Status == "running" {
+		if pod.AppName == w.AppName && pod.Image == w.image && pod.State == "running" {
 			err := w.verifyPodUser(pod.UUID)
 			if err != nil {
 				WarnError(err)

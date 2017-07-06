@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/droundy/goopt"
 	"github.com/tesujimath/rktrunner"
@@ -59,34 +60,57 @@ func stopPod(pod *rktrunner.VisitedPod) error {
 
 func main() {
 	dryRun := goopt.Flag([]string{"--dry-run"}, []string{}, "don't execute anything", "")
+	gracePeriodRaw := goopt.String([]string{"--grace-period"}, "", "duration to wait before collecting idle worker pods")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
 	goopt.Summary = "rktrunner worker pod garbage collector"
 	goopt.Suite = "rktrunner"
 	goopt.Parse(nil)
 
-	err := rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
-		if pod.Status == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
-			podlock, err := lockPod(pod.UUID)
-			if err != nil {
-				errno, isErrno := err.(syscall.Errno)
-				if isErrno && errno == syscall.EAGAIN {
-					fmt.Fprintf(os.Stderr, "skip busy %s\n", pod)
-				} else {
-					fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
+	var gracePeriod time.Duration
+	var err error
+	if *gracePeriodRaw != "" {
+		gracePeriod, err = time.ParseDuration(*gracePeriodRaw)
+		if err != nil {
+			die("%v", err)
+		}
+	}
+
+	err = rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
+		if pod.State == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
+			var expired bool
+			if pod.Started != "" {
+				started, err := time.Parse("2006-01-02 15:04:05.9 -0700 MST", pod.Started)
+				if err != nil {
+					die("failed to parse start time for pod %s: %v", pod.UUID, err)
 				}
-			} else if podlock != nil {
-				if *dryRun {
-					fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
-				} else {
-					err = stopPod(pod)
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
+				expiry := started.Add(gracePeriod)
+				expired = time.Now().After(expiry)
+			}
+			if !expired {
+				fmt.Fprintf(os.Stderr, "skip baby %s\n", pod)
+			} else {
+				podlock, err := lockPod(pod.UUID)
+				if err != nil {
+					errno, isErrno := err.(syscall.Errno)
+					if isErrno && errno == syscall.EAGAIN {
+						fmt.Fprintf(os.Stderr, "skip busy %s\n", pod)
 					} else {
-						os.Remove(rktrunner.WorkerPodDir(pod.UUID))
+						fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
 					}
+				} else if podlock != nil {
+					if *dryRun {
+						fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
+					} else {
+						err = stopPod(pod)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
+						} else {
+							os.Remove(rktrunner.WorkerPodDir(pod.UUID))
+						}
+					}
+					podlock.Close()
 				}
-				podlock.Close()
 			}
 		}
 		return true

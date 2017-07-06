@@ -25,11 +25,13 @@ type VisitedPod struct {
 	UUID    string
 	AppName string
 	Image   string
-	Status  string
+	State   string
+	Created string
+	Started string
 }
 
 func (p *VisitedPod) String() string {
-	return fmt.Sprintf("%s %s pod %s for %s", p.AppName, p.Status, p.UUID, p.Image)
+	return fmt.Sprintf("%s %s pod %s for %s", p.AppName, p.State, p.UUID, p.Image)
 }
 
 // VisitPods visits all pods, until the walker returns false.
@@ -48,14 +50,21 @@ func VisitPods(walker func(*VisitedPod) bool) error {
 	scanner := bufio.NewScanner(stdout)
 	keepVisiting := true
 	for scanner.Scan() && keepVisiting {
-		fields := strings.Fields(scanner.Text())
+		fields := strings.FieldsFunc(scanner.Text(), func(c rune) bool { return c == '\t' })
 		if len(fields) > 4 {
 			pod := VisitedPod{
 				UUID:    fields[0],
 				AppName: fields[1],
 				Image:   fields[2],
-				Status:  fields[4],
+				State:   fields[4],
 			}
+			if len(fields) > 5 {
+				pod.Created = fields[5]
+			}
+			if len(fields) > 6 {
+				pod.Started = fields[6]
+			}
+
 			keepVisiting = walker(&pod)
 		}
 	}
