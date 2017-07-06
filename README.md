@@ -75,6 +75,8 @@ The configuration option `worker-pods` may be used to enable concurrent use of p
 
 When using `worker-pods`, it is important to remove idle workers using `rktrunner-gc`, which should be run regularly as root.
 
+Before starting many application instances in parallel, it is necessary to prime the pump, that is, create an initial worker.  This may easily be done using `rkt-run --prepare`, which simply creates a worker for the image in question, and exits without running the application.
+
 Note that this feature is unlikely to be useful without the following `rkt` issues being addressed.
 
 * [fly: enter should honor uid/gid/supp-gid #3392](https://github.com/rkt/rkt/issues/3392)

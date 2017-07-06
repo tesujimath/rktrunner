@@ -41,6 +41,7 @@ type optionsT struct {
 	setenvs       *[]string
 	printEnv      *bool
 	interactive   *bool
+	prepare       *bool
 	verbose       *bool
 	dryRun        *bool
 	listAlias     *bool
@@ -89,6 +90,10 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, fmt.Errorf("configuration error: %v", err)
 	}
 
+	if *r.args.options.prepare && !r.config.WorkerPods {
+		return nil, fmt.Errorf("bad usage: prepare requires site-wide worker pods")
+	}
+
 	err = r.validateRequestedVolumes()
 	if err != nil {
 		return nil, err
@@ -135,13 +140,8 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		if err == nil && separateFetch {
 			err = r.buildFetchCommand(mode)
 		}
-		if err == nil {
-			if r.worker == nil || !r.worker.FoundPod() {
-				err = r.buildRunCommand(mode)
-			} else {
-				// reuse worker pod we found
-				r.buildEnterCommand()
-			}
+		if err == nil && (r.worker == nil || !r.worker.FoundPod()) {
+			err = r.buildRunCommand(mode)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("bad usage: %v", err)
@@ -195,6 +195,7 @@ func (r *RunnerT) parseArgs() error {
 	r.args.options.setenvs = goopt.Strings([]string{"--set-env"}, "", "environment variable")
 	r.args.options.printEnv = goopt.Flag([]string{"--print-env"}, []string{}, "print environment variables passed into container", "")
 	r.args.options.interactive = goopt.Flag([]string{"-i", "--interactive"}, []string{}, "run image interactively", "")
+	r.args.options.prepare = goopt.Flag([]string{"--prepare"}, []string{}, "prepare worker pod, but don't execute anything", "")
 	r.args.options.verbose = goopt.Flag([]string{"-v", "--verbose"}, []string{}, "show full rkt run command", "")
 	r.args.options.dryRun = goopt.Flag([]string{"--dry-run"}, []string{}, "don't execute anything", "")
 	r.args.options.listAlias = goopt.Flag([]string{"-l", "--list-alias"}, []string{}, "list image aliases", "")
@@ -521,7 +522,7 @@ func (r *RunnerT) Execute() error {
 					return err
 				}
 			}
-			if r.worker != nil {
+			if r.worker != nil && !*r.args.options.prepare {
 				err := r.buildEnterCommand()
 				if err != nil {
 					return err
@@ -534,7 +535,7 @@ func (r *RunnerT) Execute() error {
 			}
 		} else if *r.args.options.verbose {
 			r.printFetchAndRun()
-			if r.worker != nil {
+			if r.worker != nil && !*r.args.options.prepare {
 				err := r.buildEnterCommand()
 				if err != nil {
 					return err

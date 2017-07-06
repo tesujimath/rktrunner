@@ -31,6 +31,9 @@ print environment variables passed into container
 `-i`, `--interactive`
 run image interactively
 
+`--prepare`
+prepare a worker pod for this image
+
 `-v`, `--verbose`
 show full rkt run command
 
