@@ -78,7 +78,10 @@ func main() {
 
 	err = rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
 		if pod.State == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
+			stop := false
+			var podlock *os.File
 			var expired bool
+			var err error
 			if pod.Started != "" {
 				started, err := time.Parse("2006-01-02 15:04:05.9 -0700 MST", pod.Started)
 				if err != nil {
@@ -90,25 +93,35 @@ func main() {
 			if !expired {
 				fmt.Fprintf(os.Stderr, "skip baby %s\n", pod)
 			} else {
-				podlock, err := lockPod(pod.UUID)
+				podlock, err = lockPod(pod.UUID)
 				if err != nil {
 					errno, isErrno := err.(syscall.Errno)
 					if isErrno && errno == syscall.EAGAIN {
 						fmt.Fprintf(os.Stderr, "skip busy %s\n", pod)
 					} else {
+						_, isPathError := err.(*os.PathError)
+						if isPathError {
+							// shouldn't happen, so clean up the mess
+							stop = true
+						}
 						fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
 					}
 				} else if podlock != nil {
-					if *dryRun {
-						fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
+					stop = true
+				}
+			}
+			if stop {
+				if *dryRun {
+					fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
+				} else {
+					err = stopPod(pod)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
 					} else {
-						err = stopPod(pod)
-						if err != nil {
-							fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
-						} else {
-							os.Remove(rktrunner.WorkerPodDir(pod.UUID))
-						}
+						os.Remove(rktrunner.WorkerPodDir(pod.UUID))
 					}
+				}
+				if podlock != nil {
 					podlock.Close()
 				}
 			}
