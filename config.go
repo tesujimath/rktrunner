@@ -46,8 +46,9 @@ type VolumeT struct {
 }
 
 type ImageAliasT struct {
-	Image string
-	Exec  []string
+	Image       string
+	Exec        []string
+	Environment map[string]string `toml:"environment"`
 }
 
 const OptionsTable = "options"

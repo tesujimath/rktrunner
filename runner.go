@@ -333,9 +333,9 @@ func (r *RunnerT) createEnvFile(path string) error {
 	}
 	defer f.Close()
 
-	r.fragments.printEnvironment(f)
+	r.fragments.printEnvironment(f, r.image)
 	if *r.args.options.printEnv {
-		r.fragments.printEnvironment(os.Stderr)
+		r.fragments.printEnvironment(os.Stderr, r.image)
 	}
 
 	for _, setenv := range *r.args.options.setenvs {

@@ -59,6 +59,11 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `exec = ` *list-of-string* `# executables within image to expose as rkt-run aliases`
 
+`[alias.` *identifier* `.environment]`
+
+*name* `=` *value* `# environment variable override for this image`
+
+
 # TEMPLATE VARIABLES
 
 The following template variables may be used, in addition to any environment variable.

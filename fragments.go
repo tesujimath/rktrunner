@@ -23,9 +23,10 @@ import (
 )
 
 type fragmentsT struct {
-	Environment map[string]string
-	Options     ModeOptionsT
-	Volume      map[string]VolumeT
+	Environment      map[string]string
+	Options          ModeOptionsT
+	Volume           map[string]VolumeT
+	ImageEnvironment map[string]map[string]string
 }
 
 func expandFragments(desc, tstr string, vars map[string]string) (string, error) {
@@ -91,18 +92,43 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 		f.Volume[volKey] = volFrag
 	}
 
+	f.ImageEnvironment = make(map[string]map[string]string)
+	for aliasKey, aliasVal := range c.Alias {
+		envMap := make(map[string]string)
+		f.ImageEnvironment[aliasVal.Image] = envMap
+		for envKey, envVal := range aliasVal.Environment {
+			envFrag, err := expandFragments(fmt.Sprintf("alias %s environ %s", aliasKey, envKey), envVal, vars)
+			if err != nil {
+				return err
+			}
+			envMap[envKey] = envFrag
+		}
+	}
+
 	return nil
 }
 
-func (f *fragmentsT) printEnvironment(w io.Writer) {
+func (f *fragmentsT) printEnvironment(w io.Writer, image string) {
+	// merge general and image environment
+	mergedEnviron := make(map[string]string)
+	for key, val := range f.Environment {
+		mergedEnviron[key] = val
+	}
+	imageEnviron, ok := f.ImageEnvironment[image]
+	if ok {
+		for key, val := range imageEnviron {
+			mergedEnviron[key] = val
+		}
+	}
+
 	// get keys in order
-	keys := make([]string, 0, len(f.Environment))
-	for key := range f.Environment {
+	keys := make([]string, 0, len(mergedEnviron))
+	for key := range mergedEnviron {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		fmt.Fprintf(w, "%s=%s\n", key, f.Environment[key])
+		fmt.Fprintf(w, "%s=%s\n", key, mergedEnviron[key])
 	}
 }
 

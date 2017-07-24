@@ -66,6 +66,13 @@ on-request = true
 image = "quay.io/biocontainers/blast:2.6.0--boost1.61_0"
 exec = ["/usr/local/bin/blastn","/usr/local/bin/blastp","/usr/local/bin/blastx","/usr/local/bin/tblastn","/usr/local/bin/tblastx"]
 
+[alias.breseq_]
+image = "quay.io/biocontainers/breseq:0.29.0--r3.3.2_0"
+exec = ["/usr/local/bin/breseq"]
+[alias.breseq_.environment]
+# bowtie2 et al are installed in /usr/local, which is broken, but can be handled here:
+PATH = "/usr/local/sbin:/usr/local/bin:/usr/local:/usr/sbin:/usr/bin:/sbin:/bin"
+
 [alias.bwa_]
 image = "quay.io/biocontainers/bwa:0.7.15--0"
 exec = ["/usr/local/bin/bwa"]
