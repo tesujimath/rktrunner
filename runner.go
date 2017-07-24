@@ -133,7 +133,7 @@ func NewRunner(configFile string) (*RunnerT, error) {
 			err = r.resolveImage()
 		}
 		if err == nil && r.config.WorkerPods {
-			r.worker, err = NewWorker(u, r.image)
+			r.worker, err = NewWorker(u, r.image, r.config.Rkt, *r.args.options.verbose)
 		}
 		// separate fetch is not working reliably, so hide it
 		_, separateFetch := os.LookupEnv("RKTRUNNER_SEPARATE_FETCH")

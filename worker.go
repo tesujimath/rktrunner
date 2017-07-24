@@ -15,6 +15,7 @@
 package rktrunner
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -24,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/appc/spec/schema"
 )
@@ -31,16 +33,18 @@ import (
 const WORKER_APPNAME_PREFIX = "rktrunner-"
 
 type Worker struct {
+	rkt     string
 	uid     int
 	image   string
+	verbose bool
 	AppName string
 	UUID    string
 	Podlock *os.File
 }
 
-func NewWorker(u *user.User, image string) (*Worker, error) {
+func NewWorker(u *user.User, image, rkt string, verbose bool) (*Worker, error) {
 	var err error
-	w := &Worker{}
+	w := &Worker{rkt: rkt, verbose: verbose}
 
 	w.uid, err = strconv.Atoi(u.Uid)
 	if err != nil {
@@ -66,11 +70,66 @@ func (w *Worker) FoundPod() bool {
 	return w.UUID != ""
 }
 
+// awaitReady waits until the pod is running (or exited), which is necessary
+// if we just created it.
+func (w *Worker) awaitReady(uuid string) error {
+	ready := false
+	for !ready {
+		cmd := exec.Command("rkt", "status", uuid)
+		cmd.Path = w.rkt
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		err = cmd.Start()
+		if err != nil {
+			return fmt.Errorf("%s %s %s failed to start: ", w.rkt, "status", uuid, err)
+		}
+
+		foundState := false
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() && !foundState {
+			fields := strings.SplitN(scanner.Text(), "=", 2)
+			if len(fields) == 2 && fields[0] == "state" {
+				foundState = true
+				if fields[1] == "running" || fields[1] == "exited" {
+					ready = true
+				}
+			}
+		}
+		if !foundState {
+			fmt.Fprintf(os.Stderr, "warning: rkt status %s failed to list state\n", uuid)
+		}
+
+		warn := cmd.Wait()
+		if warn != nil {
+			// Simply warn about rkt status failure, since it does fail if
+			// we call it too early.  And retry.
+			if w.verbose {
+				fmt.Fprintf(os.Stderr, "warning: rkt status %s failed: %v, retry\n", uuid, warn)
+			}
+			ready = false
+		}
+		err = scanner.Err()
+		if err != nil {
+			return err
+		}
+		if !ready {
+			// not yet ready, so pause before retry
+			if w.verbose {
+				fmt.Fprintf(os.Stderr, "waiting for worker pod %s\n", uuid)
+			}
+			time.Sleep(1)
+		}
+	}
+	return nil
+}
+
 // LockPod attempts to acquire a shared lock on the pod, without blocking.
 func (w *Worker) LockPod(uuid string) error {
 	podlock, err := os.Open(WorkerPodDir(uuid))
 	if err != nil {
-		return err
+		return fmt.Errorf("LockPod attempt %v", err)
 	}
 	err = syscall.Flock(int(podlock.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
 	if err != nil {
@@ -109,6 +168,12 @@ func (w *Worker) InitializePod(uuidPath string, cmdWaiter chan error) error {
 		return err
 	}
 	uuid := string(uuidBytes)
+
+	// wait for the pod to be actually running, or exited (in case of early failure)
+	err = w.awaitReady(uuid)
+	if err != nil {
+		return fmt.Errorf("awaitReady(%s) failed: %v\n", uuid, err)
+	}
 
 	// create the worker pod dir, which can be locked by users of the worker
 	err = os.MkdirAll(WorkerPodDir(uuid), 0755)
