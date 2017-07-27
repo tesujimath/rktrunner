@@ -18,19 +18,22 @@ import (
 	"strings"
 )
 
-type imagePrefixT struct {
-	raw       string
-	canonical string
+type distributionT struct {
+	prefix            string
+	defaultIndexURL   string
+	defaultRepoPrefix string
 }
 
-var imagePrefixes []imagePrefixT = []imagePrefixT{
+var distributions []distributionT = []distributionT{
 	{
-		raw:       "docker://",
-		canonical: "registry-1.docker.io/library/",
+		prefix:            "docker://",
+		defaultIndexURL:   "registry-1.docker.io/",
+		defaultRepoPrefix: "library/",
 	},
 	{
-		raw:       "docker:",
-		canonical: "registry-1.docker.io/library/",
+		prefix:            "docker:",
+		defaultIndexURL:   "registry-1.docker.io/",
+		defaultRepoPrefix: "library/",
 	},
 }
 
@@ -38,10 +41,14 @@ var imagePrefixes []imagePrefixT = []imagePrefixT{
 // paths, and ensures there is a tag suffix, by appending :latest if required.
 func CanonicalImageName(raw string) string {
 	canonical := raw
-	for _, prefix := range imagePrefixes {
-		if strings.HasPrefix(raw, prefix.raw) {
-			n := len(prefix.raw)
-			canonical = prefix.canonical + raw[n:]
+	for _, d := range distributions {
+		if strings.HasPrefix(raw, d.prefix) {
+			n := len(d.prefix)
+			var repoPrefix string
+			if strings.IndexRune(raw[n:], '/') < 0 {
+				repoPrefix = d.defaultRepoPrefix
+			}
+			canonical = d.defaultIndexURL + repoPrefix + raw[n:]
 			break
 		}
 	}

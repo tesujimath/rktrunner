@@ -223,12 +223,18 @@ func (w *Worker) verifyPodUser(uuid string) error {
 func (w *Worker) findPod() {
 	imageName := CanonicalImageName(w.image)
 	WarnOnFailure(VisitPods(func(pod *VisitedPod) bool {
-		if pod.AppName == w.AppName && pod.Image == imageName && pod.State == "running" {
-			err := w.verifyPodUser(pod.UUID)
-			if err != nil {
-				WarnError(err)
+		if pod.AppName == w.AppName && pod.State == "running" {
+			if pod.Image == imageName {
+				err := w.verifyPodUser(pod.UUID)
+				if err != nil {
+					WarnError(err)
+				} else {
+					WarnOnFailure(w.LockPod(pod.UUID))
+				}
 			} else {
-				WarnOnFailure(w.LockPod(pod.UUID))
+				if w.verbose {
+					fmt.Fprintf(os.Stderr, "ignoring pod for %s, is not %s\n", pod.Image, imageName)
+				}
 			}
 		}
 		return !w.FoundPod()
