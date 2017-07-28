@@ -22,11 +22,17 @@ import (
 	"text/template"
 )
 
+type aliasFragmentsT struct {
+	Environment map[string]string
+	Passwd      []string
+	Group       []string
+}
+
 type fragmentsT struct {
-	Environment      map[string]string
-	Options          ModeOptionsT
-	Volume           map[string]VolumeT
-	ImageEnvironment map[string]map[string]string
+	Environment map[string]string
+	Options     ModeOptionsT
+	Volume      map[string]VolumeT
+	Alias       map[string]aliasFragmentsT
 }
 
 func expandFragments(desc, tstr string, vars map[string]string) (string, error) {
@@ -92,10 +98,9 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 		f.Volume[volKey] = volFrag
 	}
 
-	f.ImageEnvironment = make(map[string]map[string]string)
+	f.Alias = make(map[string]aliasFragmentsT)
 	for aliasKey, aliasVal := range c.Alias {
 		envMap := make(map[string]string)
-		f.ImageEnvironment[aliasVal.Image] = envMap
 		for envKey, envVal := range aliasVal.Environment {
 			envFrag, err := expandFragments(fmt.Sprintf("alias %s environ %s", aliasKey, envKey), envVal, vars)
 			if err != nil {
@@ -103,21 +108,43 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 			}
 			envMap[envKey] = envFrag
 		}
+
+		passwd := make([]string, len(aliasVal.Passwd), len(aliasVal.Passwd))
+		for i, passwdVal := range aliasVal.Passwd {
+			passwdFrag, err := expandFragments(fmt.Sprintf("alias %s passwd %d", aliasKey, i), passwdVal, vars)
+			if err != nil {
+				return err
+			}
+			passwd[i] = passwdFrag
+		}
+
+		group := make([]string, len(aliasVal.Group), len(aliasVal.Group))
+		for i, groupVal := range aliasVal.Group {
+			groupFrag, err := expandFragments(fmt.Sprintf("alias %s group %d", aliasKey, i), groupVal, vars)
+			if err != nil {
+				return err
+			}
+			group[i] = groupFrag
+		}
+
+		f.Alias[aliasKey] = aliasFragmentsT{Environment: envMap, Passwd: passwd, Group: group}
 	}
 
 	return nil
 }
 
-func (f *fragmentsT) printEnvironment(w io.Writer, image string) {
+func (f *fragmentsT) printEnvironment(w io.Writer, alias string) {
 	// merge general and image environment
 	mergedEnviron := make(map[string]string)
 	for key, val := range f.Environment {
 		mergedEnviron[key] = val
 	}
-	imageEnviron, ok := f.ImageEnvironment[image]
-	if ok {
-		for key, val := range imageEnviron {
-			mergedEnviron[key] = val
+	if alias != "" {
+		aliasFragments, ok := f.Alias[alias]
+		if ok {
+			for key, val := range aliasFragments.Environment {
+				mergedEnviron[key] = val
+			}
 		}
 	}
 
@@ -130,6 +157,14 @@ func (f *fragmentsT) printEnvironment(w io.Writer, image string) {
 	for _, key := range keys {
 		fmt.Fprintf(w, "%s=%s\n", key, mergedEnviron[key])
 	}
+}
+
+func (f *fragmentsT) passwd(alias string) []string {
+	return f.Alias[alias].Passwd
+}
+
+func (f *fragmentsT) group(alias string) []string {
+	return f.Alias[alias].Group
 }
 
 func (f *fragmentsT) formatOptions(mode, class string) []string {

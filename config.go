@@ -48,7 +48,9 @@ type VolumeT struct {
 type ImageAliasT struct {
 	Image       string
 	Exec        []string
-	Environment map[string]string `toml:"environment"`
+	Environment map[string]string
+	Passwd      []string
+	Group       []string
 }
 
 const OptionsTable = "options"
@@ -126,6 +128,12 @@ func GetConfig(path string, c *configT) error {
 		_, err := os.Stat(p)
 		if err != nil {
 			return err
+		}
+	}
+
+	for _, aliasVal := range c.Alias {
+		if (aliasVal.Passwd != nil || aliasVal.Group != nil) && !c.WorkerPods {
+			return fmt.Errorf("passwd/group requires worker-pods")
 		}
 	}
 

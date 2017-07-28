@@ -59,6 +59,10 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `exec = ` *list-of-string* `# executables within image to expose as rkt-run aliases`
 
+`passwd = ` *list-of-string* `# entries to append to passwd file`
+
+`group = ` *list-of-string* `# entries to append to group file`
+
 `[alias.` *identifier* `.environment]`
 
 *name* `=` *value* `# environment variable override for this image`

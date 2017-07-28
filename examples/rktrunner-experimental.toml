@@ -14,6 +14,7 @@ http_proxy = "{{.http_proxy}}"
 https_proxy = "{{.https_proxy}}"
 TERM = "{{.TERM}}"
 COLORTERM = "{{.COLORTERM}}"
+DISPLAY = "{{.DISPLAY}}"
 
 [options.common]
 general = ["--insecure-options=image"]
@@ -76,6 +77,12 @@ PATH = "/usr/local/sbin:/usr/local/bin:/usr/local:/usr/sbin:/usr/bin:/sbin:/bin"
 [alias.bwa_]
 image = "quay.io/biocontainers/bwa:0.7.15--0"
 exec = ["/usr/local/bin/bwa"]
+
+[alias.emacs_]
+image = "docker://silex/emacs"
+exec = ["/usr/local/bin/emacs"]
+passwd = ["{{.Uid}}:x:{{.Uid}}:{{.Uid}}::/home/{{.Username}}:/bin/bash"]
+group = ["{{.Uid}}:x:{{.Uid}}:"]
 
 [alias.julia_]
 image = "docker://julia"

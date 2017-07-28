@@ -240,3 +240,35 @@ func (w *Worker) findPod() {
 		return !w.FoundPod()
 	}))
 }
+
+// appendPasswdEntries appends the password entries to /etc/passwd in the pod
+func (w *Worker) appendPasswdEntries(passwd []string) error {
+	if w.verbose {
+		fmt.Fprintf(os.Stderr, "appending to passwd file: %s\n", strings.Join(passwd, ", "))
+	}
+	f, err := os.OpenFile(fmt.Sprintf("/var/lib/rkt/pods/run/%s/stage1/rootfs/opt/stage2/%s/rootfs/etc/passwd", w.UUID, w.AppName), os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, entry := range passwd {
+		fmt.Fprintf(f, "%s\n", entry)
+	}
+	return nil
+}
+
+// appendGroupEntries appends the password entries to /etc/group in the pod
+func (w *Worker) appendGroupEntries(group []string) error {
+	if w.verbose {
+		fmt.Fprintf(os.Stderr, "appending to group file: %s\n", strings.Join(group, ", "))
+	}
+	f, err := os.OpenFile(fmt.Sprintf("/var/lib/rkt/pods/run/%s/stage1/rootfs/opt/stage2/%s/rootfs/etc/group", w.UUID, w.AppName), os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, entry := range group {
+		fmt.Fprintf(f, "%s\n", entry)
+	}
+	return nil
+}

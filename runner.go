@@ -62,12 +62,13 @@ type aliasT struct {
 type RunnerT struct {
 	config           configT
 	environ          map[string]string
-	alias            map[string]aliasT
+	aliases          map[string]aliasT
 	requestedVolumes map[string]bool
 	fragments        fragmentsT
 	args             argsT
 	image            string
 	exec             string
+	alias            string
 	fetchCommand     *CommandT
 	runCommand       *CommandT
 	enterCommand     *CommandT
@@ -243,7 +244,7 @@ func formatAlias(key string, val aliasT) string {
 
 func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *aliasT) error {
 	var err error
-	dupVal, isDup := r.alias[key]
+	dupVal, isDup := r.aliases[key]
 	if isDup {
 		err = fmt.Errorf("duplicate alias: %s", key)
 		if warn {
@@ -251,14 +252,14 @@ func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *aliasT)
 			fmt.Fprintf(w, "%s\n", formatAlias(key, *val))
 		}
 	} else {
-		r.alias[key] = *val
+		r.aliases[key] = *val
 	}
 	return err
 }
 
 func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	var anyErr error
-	r.alias = make(map[string]aliasT)
+	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
 		err := r.registerAlias(w, warn, imageKey, &aliasT{image: imageAlias.Image})
 		if err != nil && anyErr == nil {
@@ -276,13 +277,13 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 
 func (r *RunnerT) printAliases(w io.Writer) {
 	// get keys in order
-	keys := make([]string, 0, len(r.alias))
-	for key := range r.alias {
+	keys := make([]string, 0, len(r.aliases))
+	for key := range r.aliases {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		fmt.Fprintf(w, "%s\n", formatAlias(key, r.alias[key]))
+		fmt.Fprintf(w, "%s\n", formatAlias(key, r.aliases[key]))
 	}
 }
 
@@ -354,10 +355,11 @@ func (r *RunnerT) resolveImage() error {
 		return fmt.Errorf("image cannot start with -")
 	}
 
-	alias, ok := r.alias[r.args.image]
+	alias, ok := r.aliases[r.args.image]
 	if ok {
 		r.image = alias.image
 		r.exec = alias.exec
+		r.alias = r.args.image
 	} else {
 		if *r.args.options.noImagePrefix {
 			r.image = r.args.image
@@ -597,6 +599,23 @@ func (r *RunnerT) fetchAndRun() error {
 
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
+			if r.alias != "" {
+				passwd := r.fragments.passwd(r.alias)
+				if passwd != nil {
+					err := r.worker.appendPasswdEntries(passwd)
+					if err != nil {
+						return err
+					}
+				}
+
+				group := r.fragments.group(r.alias)
+				if group != nil {
+					err := r.worker.appendGroupEntries(group)
+					if err != nil {
+						return err
+					}
+				}
+			}
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()
