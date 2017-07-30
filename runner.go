@@ -55,6 +55,7 @@ type argsT struct {
 }
 
 type aliasT struct {
+	alias string
 	image string
 	exec  string
 }
@@ -66,9 +67,9 @@ type RunnerT struct {
 	requestedVolumes map[string]bool
 	fragments        fragmentsT
 	args             argsT
+	alias            string
 	image            string
 	exec             string
-	alias            string
 	fetchCommand     *CommandT
 	runCommand       *CommandT
 	enterCommand     *CommandT
@@ -261,12 +262,12 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	var anyErr error
 	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
-		err := r.registerAlias(w, warn, imageKey, &aliasT{image: imageAlias.Image})
+		err := r.registerAlias(w, warn, imageKey, &aliasT{alias: imageKey, image: imageAlias.Image})
 		if err != nil && anyErr == nil {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
-			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{image: imageAlias.Image, exec: exec})
+			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{alias: imageKey, image: imageAlias.Image, exec: exec})
 			if err != nil && anyErr == nil {
 				anyErr = err
 			}
@@ -357,9 +358,9 @@ func (r *RunnerT) resolveImage() error {
 
 	alias, ok := r.aliases[r.args.image]
 	if ok {
+		r.alias = alias.alias
 		r.image = alias.image
 		r.exec = alias.exec
-		r.alias = r.args.image
 	} else {
 		if *r.args.options.noImagePrefix {
 			r.image = r.args.image
