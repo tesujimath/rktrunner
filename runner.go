@@ -362,6 +362,10 @@ func (r *RunnerT) resolveImage() error {
 		r.image = alias.image
 		r.exec = alias.exec
 	} else {
+		if r.config.RestrictImages {
+			// free images not allowed
+			return fmt.Errorf("restrict-images in force, only aliased images allowed")
+		}
 		if *r.args.options.noImagePrefix {
 			r.image = r.args.image
 		} else {
