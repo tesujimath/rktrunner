@@ -16,6 +16,8 @@ https_proxy = "{{.https_proxy}}"
 TERM = "{{.TERM}}"
 COLORTERM = "{{.COLORTERM}}"
 DISPLAY = "{{.DISPLAY}}"
+SSH_AUTH_SOCK = "{{.SSH_AUTH_SOCK}}"
+SSH_AGENT_PID = "{{.SSH_AGENT_PID}}"
 
 [options.common]
 general = ["--insecure-options=image"]
