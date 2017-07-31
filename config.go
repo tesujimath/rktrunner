@@ -28,6 +28,7 @@ type configT struct {
 	UsePath               bool              `toml:"use-path"`
 	WorkerPods            bool              `toml:"worker-pods"`
 	HostTimezone          bool              `toml:"host-timezone"`
+	RestrictImages            bool              `toml:"restrict-images"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`

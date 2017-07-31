@@ -19,6 +19,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `host-timezone = ` *bool* `# set pod timezone from host`
 
+`restrict-images = ` *bool* `# allow only images for which aliases have been defined`
+
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
 ## environment
