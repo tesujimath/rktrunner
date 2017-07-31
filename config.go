@@ -27,6 +27,7 @@ type configT struct {
 	PreserveCwd           bool              `toml:"preserve-cwd"`
 	UsePath               bool              `toml:"use-path"`
 	WorkerPods            bool              `toml:"worker-pods"`
+	HostTimezone          bool              `toml:"host-timezone"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
@@ -129,6 +130,10 @@ func GetConfig(path string, c *configT) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	if c.HostTimezone && !c.WorkerPods {
+		return fmt.Errorf("host-timezone requires worker-pods")
 	}
 
 	for _, aliasVal := range c.Alias {

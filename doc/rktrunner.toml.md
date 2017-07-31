@@ -17,6 +17,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `worker-pods = ` *bool* `# run user/image applications within a single worker pod`
 
+`host-timezone = ` *bool* `# set pod timezone from host`
+
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
 
 ## environment

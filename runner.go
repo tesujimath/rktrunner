@@ -600,6 +600,10 @@ func (r *RunnerT) fetchAndRun() error {
 
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
+			if r.config.HostTimezone {
+				r.worker.setTimezoneFromHost()
+			}
+
 			if r.alias != "" {
 				passwd := r.fragments.passwd(r.alias)
 				if passwd != nil {

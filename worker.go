@@ -241,12 +241,34 @@ func (w *Worker) findPod() {
 	}))
 }
 
+func (w *Worker) hostPath(podPath string) string {
+	return fmt.Sprintf("/var/lib/rkt/pods/run/%s/stage1/rootfs/opt/stage2/%s/rootfs%s", w.UUID, w.AppName, podPath)
+}
+
+func (w *Worker) setTimezoneFromHost() error {
+	if w.verbose {
+		fmt.Fprintf(os.Stderr, "setting timezone from host\n")
+	}
+	timezone := "/etc/localtime"
+	podTimezone := w.hostPath(timezone)
+	tz, err := ioutil.ReadFile(timezone)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(podTimezone)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(podTimezone, tz, 0644)
+	return err
+}
+
 // appendPasswdEntries appends the password entries to /etc/passwd in the pod
 func (w *Worker) appendPasswdEntries(passwd []string) error {
 	if w.verbose {
 		fmt.Fprintf(os.Stderr, "appending to passwd file: %s\n", strings.Join(passwd, ", "))
 	}
-	f, err := os.OpenFile(fmt.Sprintf("/var/lib/rkt/pods/run/%s/stage1/rootfs/opt/stage2/%s/rootfs/etc/passwd", w.UUID, w.AppName), os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(w.hostPath("/etc/passwd"), os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
@@ -262,7 +284,7 @@ func (w *Worker) appendGroupEntries(group []string) error {
 	if w.verbose {
 		fmt.Fprintf(os.Stderr, "appending to group file: %s\n", strings.Join(group, ", "))
 	}
-	f, err := os.OpenFile(fmt.Sprintf("/var/lib/rkt/pods/run/%s/stage1/rootfs/opt/stage2/%s/rootfs/etc/group", w.UUID, w.AppName), os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(w.hostPath("/etc/group"), os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}

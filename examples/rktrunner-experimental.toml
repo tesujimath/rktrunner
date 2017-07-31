@@ -2,6 +2,7 @@ rkt = "/home/guestsi/go/src/github.com/rkt/rkt/release-build/target/bin/rkt"
 preserve-cwd = true
 use-path = true
 worker-pods = true
+host-timezone = true
 exec-slave-dir = "/home/guestsi/go/bin"
 default-interactive-cmd = "sh"
 
@@ -83,6 +84,9 @@ image = "docker://silex/emacs"
 exec = ["/usr/local/bin/emacs"]
 passwd = ["{{.Uid}}:x:{{.Uid}}:{{.Uid}}::/home/{{.Username}}:/bin/bash"]
 group = ["{{.Uid}}:x:{{.Uid}}:"]
+[alias.emacs_.environment]
+PATH = "{{.PATH}}"
+GOROOT = "{{.GOROOT}}"
 
 [alias.julia_]
 image = "docker://julia"
