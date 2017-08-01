@@ -615,25 +615,19 @@ func (r *RunnerT) fetchAndRun() error {
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
 
-			if r.alias != "" {
+			if err == nil && r.alias != "" {
 				if r.aliases[r.alias].hostTimezone {
-					r.worker.setTimezoneFromHost()
+					err = r.worker.setTimezoneFromHost()
 				}
 
 				passwd := r.fragments.passwd(r.alias)
-				if len(passwd) > 0 {
-					err := r.worker.appendPasswdEntries(passwd)
-					if err != nil {
-						return err
-					}
+				if err == nil && len(passwd) > 0 {
+					err = r.worker.appendPasswdEntries(passwd)
 				}
 
 				group := r.fragments.group(r.alias)
-				if len(group) > 0 {
-					err := r.worker.appendGroupEntries(group)
-					if err != nil {
-						return err
-					}
+				if err == nil && len(group) > 0 {
+					err = r.worker.appendGroupEntries(group)
 				}
 			}
 		} else {
