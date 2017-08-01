@@ -610,7 +610,7 @@ func (r *RunnerT) fetchAndRun() error {
 
 			if r.alias != "" {
 				passwd := r.fragments.passwd(r.alias)
-				if passwd != nil {
+				if len(passwd) > 0 {
 					err := r.worker.appendPasswdEntries(passwd)
 					if err != nil {
 						return err
@@ -618,7 +618,7 @@ func (r *RunnerT) fetchAndRun() error {
 				}
 
 				group := r.fragments.group(r.alias)
-				if group != nil {
+				if len(group) > 0 {
 					err := r.worker.appendGroupEntries(group)
 					if err != nil {
 						return err
