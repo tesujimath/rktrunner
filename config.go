@@ -27,8 +27,7 @@ type configT struct {
 	PreserveCwd           bool              `toml:"preserve-cwd"`
 	UsePath               bool              `toml:"use-path"`
 	WorkerPods            bool              `toml:"worker-pods"`
-	HostTimezone          bool              `toml:"host-timezone"`
-	RestrictImages            bool              `toml:"restrict-images"`
+	RestrictImages        bool              `toml:"restrict-images"`
 	ExecSlaveDir          string            `toml:"exec-slave-dir"`
 	AutoImagePrefix       map[string]string `toml:"auto-image-prefix"`
 	DefaultInteractiveCmd string            `toml:"default-interactive-cmd"`
@@ -48,11 +47,12 @@ type VolumeT struct {
 }
 
 type ImageAliasT struct {
-	Image       string
-	Exec        []string
-	Environment map[string]string
-	Passwd      []string
-	Group       []string
+	Image        string
+	Exec         []string
+	Environment  map[string]string
+	Passwd       []string
+	Group        []string
+	HostTimezone bool `toml:"host-timezone"`
 }
 
 const OptionsTable = "options"
@@ -133,13 +133,12 @@ func GetConfig(path string, c *configT) error {
 		}
 	}
 
-	if c.HostTimezone && !c.WorkerPods {
-		return fmt.Errorf("host-timezone requires worker-pods")
-	}
-
 	for _, aliasVal := range c.Alias {
 		if (aliasVal.Passwd != nil || aliasVal.Group != nil) && !c.WorkerPods {
 			return fmt.Errorf("passwd/group requires worker-pods")
+		}
+		if aliasVal.HostTimezone && !c.WorkerPods {
+			return fmt.Errorf("host-timezone requires worker-pods")
 		}
 	}
 

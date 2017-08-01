@@ -55,9 +55,10 @@ type argsT struct {
 }
 
 type aliasT struct {
-	alias string
-	image string
-	exec  string
+	alias        string
+	image        string
+	exec         string
+	hostTimezone bool
 }
 
 type RunnerT struct {
@@ -262,12 +263,21 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	var anyErr error
 	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
-		err := r.registerAlias(w, warn, imageKey, &aliasT{alias: imageKey, image: imageAlias.Image})
+		err := r.registerAlias(w, warn, imageKey, &aliasT{
+			alias:        imageKey,
+			image:        imageAlias.Image,
+			hostTimezone: imageAlias.HostTimezone,
+		})
 		if err != nil && anyErr == nil {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
-			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{alias: imageKey, image: imageAlias.Image, exec: exec})
+			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{
+				alias:        imageKey,
+				image:        imageAlias.Image,
+				exec:         exec,
+				hostTimezone: imageAlias.HostTimezone,
+			})
 			if err != nil && anyErr == nil {
 				anyErr = err
 			}
@@ -604,11 +614,12 @@ func (r *RunnerT) fetchAndRun() error {
 
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
-			if r.config.HostTimezone {
-				r.worker.setTimezoneFromHost()
-			}
 
 			if r.alias != "" {
+				if r.aliases[r.alias].hostTimezone {
+					r.worker.setTimezoneFromHost()
+				}
+
 				passwd := r.fragments.passwd(r.alias)
 				if len(passwd) > 0 {
 					err := r.worker.appendPasswdEntries(passwd)

@@ -17,8 +17,6 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `worker-pods = ` *bool* `# run user/image applications within a single worker pod`
 
-`host-timezone = ` *bool* `# set pod timezone from host`
-
 `restrict-images = ` *bool* `# allow only images for which aliases have been defined`
 
 `exec-slave-dir = ` *string* `# host directory containing rkt-run-slave program`
@@ -66,6 +64,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 `passwd = ` *list-of-string* `# entries to append to passwd file`
 
 `group = ` *list-of-string* `# entries to append to group file`
+
+`host-timezone = ` *bool* `# set pod timezone from host`
 
 `[alias.` *identifier* `.environment]`
 
