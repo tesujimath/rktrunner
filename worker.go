@@ -65,6 +65,13 @@ func NewWorker(u *user.User, image, rkt string, verbose bool) (*Worker, error) {
 	return w, nil
 }
 
+// WarnOnFailureIfVerbose warns if there is an error and we are in verbose mode
+func (w *Worker) WarnOnFailureIfVerbose(err error) {
+	if w.verbose {
+		WarnOnFailure(err)
+	}
+}
+
 // FoundPod returns whether we found (and locked) a suitable pod.
 func (w *Worker) FoundPod() bool {
 	return w.UUID != ""
@@ -97,8 +104,8 @@ func (w *Worker) awaitReady(uuid string) error {
 				}
 			}
 		}
-		if !foundState {
-			fmt.Fprintf(os.Stderr, "warning: rkt status %s failed to list state\n", uuid)
+		if !foundState && w.verbose {
+			Warnf("rkt status %s failed to list state", uuid)
 		}
 
 		warn := cmd.Wait()
@@ -106,7 +113,7 @@ func (w *Worker) awaitReady(uuid string) error {
 			// Simply warn about rkt status failure, since it does fail if
 			// we call it too early.  And retry.
 			if w.verbose {
-				fmt.Fprintf(os.Stderr, "warning: rkt status %s failed: %v, retry\n", uuid, warn)
+				Warnf("rkt status %s failed: %v, retry", uuid, warn)
 			}
 			ready = false
 		}
@@ -222,15 +229,14 @@ func (w *Worker) verifyPodUser(uuid string) error {
 // findPod finds the UUID for a worker pod, if any
 func (w *Worker) findPod() {
 	imageName := CanonicalImageName(w.image)
-	WarnOnFailure(VisitPods(func(pod *VisitedPod) bool {
+	w.WarnOnFailureIfVerbose(VisitPods(func(pod *VisitedPod) bool {
 		if pod.AppName == w.AppName && pod.State == "running" {
 			if pod.Image == imageName {
 				err := w.verifyPodUser(pod.UUID)
-				if err != nil {
-					WarnError(err)
-				} else {
-					WarnOnFailure(w.LockPod(pod.UUID))
+				if err == nil {
+					err = w.LockPod(pod.UUID)
 				}
+				w.WarnOnFailureIfVerbose(err)
 			} else {
 				if w.verbose {
 					fmt.Fprintf(os.Stderr, "ignoring pod for %s, is not %s\n", pod.Image, imageName)

@@ -19,6 +19,12 @@ import (
 	"os"
 )
 
+func Warnf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "warning: ")
+	fmt.Fprintf(os.Stderr, format, args)
+	fmt.Fprintf(os.Stderr, "\n")
+}
+
 func WarnError(err error) {
 	fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 }
