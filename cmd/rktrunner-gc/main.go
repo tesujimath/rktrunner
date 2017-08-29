@@ -44,7 +44,7 @@ func lockPod(uuid string) (*os.File, error) {
 	return podlock, nil
 }
 
-func stopPod(pod *rktrunner.VisitedPod) error {
+func stopPod(pod *rktrunner.VisitedPod, podState string) error {
 	args := []string{"rkt", "stop", pod.UUID}
 	argv0, err := exec.LookPath(args[0])
 	if err != nil {
@@ -53,7 +53,7 @@ func stopPod(pod *rktrunner.VisitedPod) error {
 	cmd := exec.Command(argv0, args[1:]...)
 	err = cmd.Run()
 	if err == nil {
-		fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
+		fmt.Fprintf(os.Stderr, "stop %s %s\n", podState, pod)
 	}
 	return err
 }
@@ -79,6 +79,7 @@ func main() {
 	err = rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
 		if pod.State == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
 			stop := false
+			podState := "idle"
 			var podlock *os.File
 			var expired bool
 			var err error
@@ -103,8 +104,10 @@ func main() {
 						if isPathError {
 							// shouldn't happen, so clean up the mess
 							stop = true
+							podState = "orphaned"
+						} else {
+							fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
 						}
-						fmt.Fprintf(os.Stderr, "warning: %s %v %T\n", pod, err, err)
 					}
 				} else if podlock != nil {
 					stop = true
@@ -112,9 +115,9 @@ func main() {
 			}
 			if stop {
 				if *dryRun {
-					fmt.Fprintf(os.Stderr, "stop idle %s\n", pod)
+					fmt.Fprintf(os.Stderr, "stop %s %s\n", podState, pod)
 				} else {
-					err = stopPod(pod)
+					err = stopPod(pod, podState)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "warning: %s %v\n", pod, err)
 					} else {
