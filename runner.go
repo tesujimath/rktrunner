@@ -493,7 +493,9 @@ func (r *RunnerT) buildEnterCommand() error {
 			r.enterCommand.AppendArgs("--cwd", cwd)
 		}
 		if r.environmentUpdate != nil {
-			fmt.Fprintf(os.Stderr, "environment-update: %v\n", r.environmentUpdate)
+			if *r.args.options.verbose {
+				fmt.Fprintf(os.Stderr, "environment-update: %v\n", r.environmentUpdate)
+			}
 			for _, name := range r.environmentUpdate {
 				value, ok := r.podEnviron[name]
 				if ok {
