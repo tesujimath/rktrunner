@@ -17,8 +17,6 @@ package rktrunner
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"sort"
 	"text/template"
 )
 
@@ -133,7 +131,7 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 	return nil
 }
 
-func (f *fragmentsT) printEnvironment(w io.Writer, alias string) {
+func (f *fragmentsT) getEnvironment(alias string) map[string]string {
 	// merge general and image environment
 	mergedEnviron := make(map[string]string)
 	for key, val := range f.Environment {
@@ -147,16 +145,7 @@ func (f *fragmentsT) printEnvironment(w io.Writer, alias string) {
 			}
 		}
 	}
-
-	// get keys in order
-	keys := make([]string, 0, len(mergedEnviron))
-	for key := range mergedEnviron {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		fmt.Fprintf(w, "%s=%s\n", key, mergedEnviron[key])
-	}
+	return mergedEnviron
 }
 
 func (f *fragmentsT) passwd(alias string) []string {

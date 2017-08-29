@@ -55,26 +55,29 @@ type argsT struct {
 }
 
 type aliasT struct {
-	alias        string
-	image        string
-	exec         string
-	hostTimezone bool
+	alias             string
+	image             string
+	exec              string
+	hostTimezone      bool
+	environmentUpdate []string
 }
 
 type RunnerT struct {
-	config           configT
-	environ          map[string]string
-	aliases          map[string]aliasT
-	requestedVolumes map[string]bool
-	fragments        fragmentsT
-	args             argsT
-	alias            string
-	image            string
-	exec             string
-	fetchCommand     *CommandT
-	runCommand       *CommandT
-	enterCommand     *CommandT
-	worker           *Worker
+	config            configT
+	hostEnviron       map[string]string
+	podEnviron        map[string]string
+	aliases           map[string]aliasT
+	requestedVolumes  map[string]bool
+	fragments         fragmentsT
+	args              argsT
+	alias             string
+	image             string
+	exec              string
+	environmentUpdate []string
+	fetchCommand      *CommandT
+	runCommand        *CommandT
+	enterCommand      *CommandT
+	worker            *Worker
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -102,7 +105,7 @@ func NewRunner(configFile string) (*RunnerT, error) {
 		return nil, err
 	}
 
-	r.parseEnviron()
+	r.hostEnviron = ParseEnviron(os.Environ())
 
 	err = r.registerAliases(os.Stderr, true)
 	if err != nil {
@@ -177,9 +180,14 @@ func (r *RunnerT) validateRequestedVolumes() error {
 	return nil
 }
 
-// runSlave returns whether we need to run the slave
-func (r *RunnerT) runSlave() bool {
+// runWithSlave returns whether we need the slave on running a pod
+func (r *RunnerT) runWithSlave() bool {
 	return r.config.PreserveCwd || r.config.UsePath || r.config.WorkerPods
+}
+
+// enterWithSlave returns whether we need the slave on entering a pod
+func (r *RunnerT) enterWithSlave() bool {
+	return r.config.PreserveCwd || r.config.UsePath || r.environmentUpdate != nil
 }
 
 func (r *RunnerT) autoPrefix(image string) string {
@@ -264,19 +272,21 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
 		err := r.registerAlias(w, warn, imageKey, &aliasT{
-			alias:        imageKey,
-			image:        imageAlias.Image,
-			hostTimezone: imageAlias.HostTimezone,
+			alias:             imageKey,
+			image:             imageAlias.Image,
+			hostTimezone:      imageAlias.HostTimezone,
+			environmentUpdate: imageAlias.EnvironmentUpdate,
 		})
 		if err != nil && anyErr == nil {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
 			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{
-				alias:        imageKey,
-				image:        imageAlias.Image,
-				exec:         exec,
-				hostTimezone: imageAlias.HostTimezone,
+				alias:             imageKey,
+				image:             imageAlias.Image,
+				exec:              exec,
+				hostTimezone:      imageAlias.HostTimezone,
+				environmentUpdate: imageAlias.EnvironmentUpdate,
 			})
 			if err != nil && anyErr == nil {
 				anyErr = err
@@ -298,24 +308,11 @@ func (r *RunnerT) printAliases(w io.Writer) {
 	}
 }
 
-// parseEnviron extracts all environment variables into a map
-func (r *RunnerT) parseEnviron() {
-	r.environ = make(map[string]string)
-	for _, keyval := range os.Environ() {
-		i := strings.IndexRune(keyval, '=')
-		if i != -1 {
-			key := keyval[:i]
-			val := keyval[i+1:]
-			r.environ[key] = val
-		}
-	}
-}
-
 // templateVariables returns a new map, comprising the base environ,
 // augmented by (most of) the user fields
 func (r *RunnerT) templateVariables(u *user.User) map[string]string {
 	vars := make(map[string]string)
-	for k, v := range r.environ {
+	for k, v := range r.hostEnviron {
 		vars[k] = v
 	}
 	vars["Uid"] = u.Uid
@@ -325,19 +322,6 @@ func (r *RunnerT) templateVariables(u *user.User) map[string]string {
 	return vars
 }
 
-// buildEnviron turns the environ maps into a list of strings
-func (r *RunnerT) buildEnviron() []string {
-	var result []string
-	mergedEnviron := make(map[string]string)
-	for key, val := range r.environ {
-		mergedEnviron[key] = val
-	}
-	for key, val := range mergedEnviron {
-		result = append(result, fmt.Sprintf("%s=%s", key, val))
-	}
-	return result
-}
-
 func (r *RunnerT) createEnvFile(path string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -345,9 +329,9 @@ func (r *RunnerT) createEnvFile(path string) error {
 	}
 	defer f.Close()
 
-	r.fragments.printEnvironment(f, r.alias)
+	PrintEnvironment(f, r.podEnviron)
 	if *r.args.options.printEnv {
-		r.fragments.printEnvironment(os.Stderr, r.alias)
+		PrintEnvironment(os.Stderr, r.podEnviron)
 	}
 
 	for _, setenv := range *r.args.options.setenvs {
@@ -371,6 +355,7 @@ func (r *RunnerT) resolveImage() error {
 		r.alias = alias.alias
 		r.image = alias.image
 		r.exec = alias.exec
+		r.environmentUpdate = alias.environmentUpdate
 	} else {
 		if r.config.RestrictImages {
 			// free images not allowed
@@ -399,12 +384,14 @@ func (r *RunnerT) resolveImage() error {
 		return fmt.Errorf("command cannot start with -")
 	}
 
+	r.podEnviron = r.fragments.getEnvironment(r.alias)
+
 	return nil
 }
 
 func (r *RunnerT) formatVolumes() []string {
 	volumes := r.fragments.formatVolumes(r.requestedVolumes)
-	if r.runSlave() {
+	if r.runWithSlave() {
 		volumes = append(volumes,
 			"--volume", fmt.Sprintf("%s,kind=host,source=%s", slaveBinVolume, r.config.ExecSlaveDir))
 	}
@@ -413,7 +400,7 @@ func (r *RunnerT) formatVolumes() []string {
 
 func (r *RunnerT) formatMounts() []string {
 	mounts := r.fragments.formatMounts(r.requestedVolumes)
-	if r.runSlave() {
+	if r.runWithSlave() {
 		mounts = append(mounts,
 			"--mount", fmt.Sprintf("volume=%s,target=%s", slaveBinVolume, slaveBinDir))
 	}
@@ -459,7 +446,7 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 	r.runCommand.AppendArgs(r.formatMounts()...)
 	r.runCommand.AppendArgs(r.fragments.formatOptions(mode, ImageClass)...)
 
-	if r.runSlave() {
+	if r.runWithSlave() {
 		r.runCommand.AppendArgs("--exec", filepath.Join(slaveBinDir, slaveRunner), "--")
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
@@ -485,7 +472,7 @@ func (r *RunnerT) buildRunCommand(mode string) error {
 		r.runCommand.AppendArgs(r.args.cmdArgs...)
 	}
 
-	r.runCommand.SetEnviron(r.buildEnviron())
+	r.runCommand.SetEnviron(BuildEnviron(r.hostEnviron))
 	return nil
 }
 
@@ -499,7 +486,7 @@ func (r *RunnerT) buildEnterCommand() error {
 		r.enterCommand.AppendArgs("$uuid")
 	}
 
-	if r.runSlave() {
+	if r.enterWithSlave() {
 		r.enterCommand.AppendArgs(filepath.Join(slaveBinDir, slaveRunner))
 		if r.config.PreserveCwd {
 			cwd, err := os.Getwd()
@@ -507,6 +494,15 @@ func (r *RunnerT) buildEnterCommand() error {
 				return err
 			}
 			r.enterCommand.AppendArgs("--cwd", cwd)
+		}
+		if r.environmentUpdate != nil {
+			fmt.Fprintf(os.Stderr, "environment-update: %v\n", r.environmentUpdate)
+			for _, name := range r.environmentUpdate {
+				value, ok := r.podEnviron[name]
+				if ok {
+					r.enterCommand.AppendArgs("--set-env", fmt.Sprintf("%s=%s", name, value))
+				}
+			}
 		}
 	}
 

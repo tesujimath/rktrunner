@@ -21,6 +21,7 @@ import (
 	"syscall"
 
 	"github.com/droundy/goopt"
+	"github.com/tesujimath/rktrunner"
 )
 
 func die(format string, args ...interface{}) {
@@ -45,6 +46,7 @@ func waitForever() error {
 func main() {
 	wait := goopt.Flag([]string{"--wait"}, []string{}, "wait forever", "")
 	cwd := goopt.String([]string{"--cwd"}, "", "run with current working directory")
+	setenvs := goopt.Strings([]string{"--set-env"}, "", "environment variable")
 	goopt.RequireOrder = true
 	goopt.Author = "Simon Guest <simon.guest@tesujimath.org>"
 	goopt.Summary = "Slave program to run within rkt container"
@@ -70,12 +72,22 @@ func main() {
 		}
 	}
 
+	// environment
+	env := os.Environ()
+	if *setenvs != nil {
+		environ := rktrunner.ParseEnviron(env)
+		for _, setenv := range *setenvs {
+			rktrunner.UpdateEnviron(environ, setenv)
+		}
+		env = rktrunner.BuildEnviron(environ)
+	}
+
 	if len(args) > 0 {
 		argv0, err := exec.LookPath(args[0])
 		if err != nil {
 			die("%v PATH=%s", err, os.Getenv("PATH"))
 		}
-		err = syscall.Exec(argv0, args, os.Environ())
+		err = syscall.Exec(argv0, args, env)
 		if err != nil {
 			die("%v", err)
 		}

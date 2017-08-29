@@ -5,21 +5,24 @@
 
 all: rkt-run rkt-run-helper rkt-run-slave rktrunner-gc doc
 
+# ensure executables are statically linked
+GO := CGO_ENABLED=0 go
+
 rkt-run:
-	go install github.com/tesujimath/rktrunner/cmd/rkt-run
+	$(GO) install github.com/tesujimath/rktrunner/cmd/rkt-run
 
 rkt-run-helper:
-	go install github.com/tesujimath/rktrunner/cmd/rkt-run-helper
+	$(GO) install github.com/tesujimath/rktrunner/cmd/rkt-run-helper
 
 rkt-run-slave:
-	go install github.com/tesujimath/rktrunner/cmd/rkt-run-slave
+	$(GO) install github.com/tesujimath/rktrunner/cmd/rkt-run-slave
 
 rktrunner-gc:
-	go install github.com/tesujimath/rktrunner/cmd/rktrunner-gc
+	$(GO) install github.com/tesujimath/rktrunner/cmd/rktrunner-gc
 
 # test program:
 get-worker:
-	go install github.com/tesujimath/rktrunner/cmd/get-worker
+	$(GO) install github.com/tesujimath/rktrunner/cmd/get-worker
 
 doc: doc/rkt-run.1.gz doc/rktrunner.toml.5.gz
 

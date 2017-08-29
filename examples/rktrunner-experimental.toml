@@ -1,4 +1,4 @@
-rkt = "/home/guestsi/go/src/github.com/rkt/rkt/release-build/target/bin/rkt"
+rkt = "/usr/bin/rkt"
 preserve-cwd = true
 use-path = true
 worker-pods = true
@@ -16,13 +16,12 @@ TERM = "{{.TERM}}"
 COLORTERM = "{{.COLORTERM}}"
 DISPLAY = "{{.DISPLAY}}"
 SSH_AUTH_SOCK = "{{.SSH_AUTH_SOCK}}"
-SSH_AGENT_PID = "{{.SSH_AGENT_PID}}"
 
 [options.common]
 general = ["--insecure-options=image"]
 run = [
     "--net=host",
-    # AgResearch nameservers, so container can resolve webgate
+    # local nameservers, so container can resolve web proxy
     "--dns=147.158.128.110",
     "--dns=147.158.105.4",
     "--dns=147.158.128.45",
@@ -31,7 +30,7 @@ image = [
     "--user={{.Uid}}",
     "--group={{.Gid}}",
     "--seccomp", "mode=retain,@docker/default-whitelist,mbind",  # for Julia, see https://github.com/rkt/rkt/issues/3651
-    "--stage1-path=/home/guestsi/go/src/github.com/rkt/rkt/release-build/target/bin/stage1-fly.aci",
+    "--stage1-path=/usr/lib/rkt/stage1-images/stage1-fly.aci",
 ]
 
 [volume.tmp]
@@ -65,6 +64,11 @@ on-request = true
 # which don't have a default executable.
 #
 
+[alias.alpine-sh_]
+image = "quay.io/coreos/alpine-sh"
+# for testing:
+environment-update = ["DISPLAY"]
+
 [alias.blast_]
 image = "quay.io/biocontainers/blast:2.6.0--boost1.61_0"
 exec = ["/usr/local/bin/blastn","/usr/local/bin/blastp","/usr/local/bin/blastx","/usr/local/bin/tblastn","/usr/local/bin/tblastx"]
@@ -86,6 +90,7 @@ exec = ["/usr/local/bin/emacs"]
 passwd = ["{{.Uid}}:x:{{.Uid}}:{{.Uid}}::/home/{{.Username}}:/bin/bash"]
 group = ["{{.Uid}}:x:{{.Uid}}:"]
 host-timezone = true
+environment-update = ["DISPLAY"]
 [alias.emacs_.environment]
 PATH = "{{.PATH}}"
 GOROOT = "{{.GOROOT}}"

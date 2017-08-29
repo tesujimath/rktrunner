@@ -67,6 +67,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `host-timezone = ` *bool* `# set pod timezone from host`
 
+`environment-update = ` *list-of-string* `# environment variable names to update in rkt enter`
+
 `[alias.` *identifier* `.environment]`
 
 *name* `=` *value* `# environment variable override for this image`

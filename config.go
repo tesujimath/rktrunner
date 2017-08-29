@@ -47,12 +47,13 @@ type VolumeT struct {
 }
 
 type ImageAliasT struct {
-	Image        string
-	Exec         []string
-	Environment  map[string]string
-	Passwd       []string
-	Group        []string
-	HostTimezone bool `toml:"host-timezone"`
+	Image             string
+	Exec              []string
+	Environment       map[string]string
+	Passwd            []string
+	Group             []string
+	HostTimezone      bool     `toml:"host-timezone"`
+	EnvironmentUpdate []string `toml:"environment-update"`
 }
 
 const OptionsTable = "options"
@@ -139,6 +140,9 @@ func GetConfig(path string, c *configT) error {
 		}
 		if aliasVal.HostTimezone && !c.WorkerPods {
 			return fmt.Errorf("host-timezone requires worker-pods")
+		}
+		if aliasVal.EnvironmentUpdate != nil && c.ExecSlaveDir == "" {
+			return fmt.Errorf("environment-update requires exec-slave-dir")
 		}
 	}
 
