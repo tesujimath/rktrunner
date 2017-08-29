@@ -76,8 +76,14 @@ func main() {
 		}
 	}
 
+	runningWorkerPods, err := rktrunner.GetWorkerPodUuids(false)
+	if err != nil {
+		return
+	}
+
 	err = rktrunner.VisitPods(func(pod *rktrunner.VisitedPod) bool {
 		if pod.State == "running" && strings.HasPrefix(pod.AppName, rktrunner.WORKER_APPNAME_PREFIX) {
+			runningWorkerPods[pod.UUID] = true
 			stop := false
 			podState := "idle"
 			var podlock *os.File
@@ -131,6 +137,17 @@ func main() {
 		}
 		return true
 	})
+
+	// clean up any worker pod directories that don't have running pods
+	for uuid, running := range runningWorkerPods {
+		if !running {
+			fmt.Fprintf(os.Stderr, "warning: spurious lockdir for pod %s, removing\n", uuid)
+			if !*dryRun {
+				os.Remove(rktrunner.WorkerPodDir(uuid))
+			}
+		}
+	}
+
 	if err != nil {
 		die("%v", err)
 	}

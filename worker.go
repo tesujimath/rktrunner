@@ -300,3 +300,20 @@ func (w *Worker) appendGroupEntries(group []string) error {
 	}
 	return nil
 }
+
+func GetWorkerPodUuids(state bool) (map[string]bool, error) {
+	podPrefixLen := len(podPrefix)
+	files, err := ioutil.ReadDir(masterRoot)
+	if err != nil {
+		return nil, err
+	}
+	uuids := make(map[string]bool)
+	for _, file := range files {
+		name := file.Name()
+		if strings.HasPrefix(name, podPrefix) {
+			uuid := name[podPrefixLen:]
+			uuids[uuid] = state
+		}
+	}
+	return uuids, nil
+}

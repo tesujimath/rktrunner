@@ -27,12 +27,14 @@ const masterRoot = "/var/lib/rktrunner"
 
 const slaveRunner = "rkt-run-slave"
 
+const podPrefix = "pod-"
+
 func masterRunDir() string {
 	return filepath.Join(masterRoot, fmt.Sprintf("runner-%d", os.Getpid()))
 }
 
 func WorkerPodDir(uuid string) string {
-	return filepath.Join(masterRoot, fmt.Sprintf("pod-%s", uuid))
+	return filepath.Join(masterRoot, fmt.Sprintf("%s%s", podPrefix, uuid))
 }
 
 func envFilePath() string {
