@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"sort"
@@ -31,8 +30,6 @@ import (
 )
 
 var ErrNotRoot = errors.New("must run as root")
-var ErrRktRunFailed = errors.New("rkt run failed")
-var ErrRktEnterFailed = errors.New("rkt enter failed")
 
 type optionsT struct {
 	config        *string
@@ -629,14 +626,6 @@ func (r *RunnerT) fetchAndRun() error {
 		} else {
 			// don't care about the UUID, just wait for the pod to exit
 			err = r.runCommand.Wait()
-		}
-
-		// ensure we don't print an error message if rkt run already did
-		if err != nil {
-			_, isExitErr := err.(*exec.ExitError)
-			if isExitErr {
-				err = ErrRktRunFailed
-			}
 		}
 	} else {
 		if *r.args.options.verbose {

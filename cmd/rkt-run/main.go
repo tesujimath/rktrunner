@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 
@@ -24,7 +25,7 @@ import (
 )
 
 func die(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "rkt-run: %s\n", fmt.Sprintf(format, args))
+	fmt.Fprintf(os.Stderr, "rkt-run: %s\n", fmt.Sprintf(format, args...))
 	os.Exit(1)
 }
 
@@ -59,11 +60,10 @@ func main() {
 
 	err = r.Execute()
 	if err != nil {
-		switch err {
-		case rktrunner.ErrRktRunFailed:
-			// don't output message, since rkt run already did
+		_, isExitErr := err.(*exec.ExitError)
+		if isExitErr {
 			os.Exit(1)
-		default:
+		} else {
 			die("failed: %v", err)
 		}
 	}
