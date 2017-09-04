@@ -52,7 +52,7 @@ type argsT struct {
 }
 
 type aliasT struct {
-	alias             string
+	name              string
 	image             string
 	exec              string
 	hostTimezone      bool
@@ -60,21 +60,20 @@ type aliasT struct {
 }
 
 type RunnerT struct {
-	config            configT
-	hostEnviron       map[string]string
-	podEnviron        map[string]string
-	aliases           map[string]aliasT
-	requestedVolumes  map[string]bool
-	fragments         fragmentsT
-	args              argsT
-	alias             string
-	image             string
-	exec              string
-	environmentUpdate []string
-	fetchCommand      *CommandT
-	runCommand        *CommandT
-	enterCommand      *CommandT
-	worker            *Worker
+	config           configT
+	hostEnviron      map[string]string
+	podEnviron       map[string]string
+	aliases          map[string]aliasT
+	requestedVolumes map[string]bool
+	fragments        fragmentsT
+	args             argsT
+	alias            *aliasT
+	image            string
+	exec             string
+	fetchCommand     *CommandT
+	runCommand       *CommandT
+	enterCommand     *CommandT
+	worker           *Worker
 }
 
 func NewRunner(configFile string) (*RunnerT, error) {
@@ -154,6 +153,22 @@ func NewRunner(configFile string) (*RunnerT, error) {
 	return &r, nil
 }
 
+func (r *RunnerT) aliasName() string {
+	if r.alias != nil {
+		return r.alias.name
+	} else {
+		return ""
+	}
+}
+
+func (r *RunnerT) environmentUpdate() []string {
+	if r.alias != nil {
+		return r.alias.environmentUpdate
+	} else {
+		return nil
+	}
+}
+
 // validateRequestedVolumes checks whether the user is requesting
 // only what is allowed
 func (r *RunnerT) validateRequestedVolumes() error {
@@ -184,7 +199,7 @@ func (r *RunnerT) runWithSlave() bool {
 
 // enterWithSlave returns whether we need the slave on entering a pod
 func (r *RunnerT) enterWithSlave() bool {
-	return r.config.PreserveCwd || r.config.UsePath || r.environmentUpdate != nil
+	return r.config.PreserveCwd || r.config.UsePath || (r.alias != nil && r.alias.environmentUpdate != nil)
 }
 
 func (r *RunnerT) autoPrefix(image string) string {
@@ -269,7 +284,7 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
 		err := r.registerAlias(w, warn, imageKey, &aliasT{
-			alias:             imageKey,
+			name:              imageKey,
 			image:             imageAlias.Image,
 			hostTimezone:      imageAlias.HostTimezone,
 			environmentUpdate: imageAlias.EnvironmentUpdate,
@@ -279,7 +294,7 @@ func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
 		}
 		for _, exec := range imageAlias.Exec {
 			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{
-				alias:             imageKey,
+				name:              imageKey,
 				image:             imageAlias.Image,
 				exec:              exec,
 				hostTimezone:      imageAlias.HostTimezone,
@@ -349,10 +364,9 @@ func (r *RunnerT) resolveImage() error {
 
 	alias, ok := r.aliases[r.args.image]
 	if ok {
-		r.alias = alias.alias
-		r.image = alias.image
-		r.exec = alias.exec
-		r.environmentUpdate = alias.environmentUpdate
+		r.alias = &alias
+		r.image = r.alias.image
+		r.exec = r.alias.exec
 	} else {
 		if r.config.RestrictImages {
 			// free images not allowed
@@ -381,7 +395,7 @@ func (r *RunnerT) resolveImage() error {
 		return fmt.Errorf("command cannot start with -")
 	}
 
-	r.podEnviron = r.fragments.getEnvironment(r.alias)
+	r.podEnviron = r.fragments.getEnvironment(r.aliasName())
 
 	return nil
 }
@@ -492,11 +506,12 @@ func (r *RunnerT) buildEnterCommand() error {
 			}
 			r.enterCommand.AppendArgs("--cwd", cwd)
 		}
-		if r.environmentUpdate != nil {
+		environmentUpdate := r.environmentUpdate()
+		if environmentUpdate != nil {
 			if *r.args.options.verbose {
-				fmt.Fprintf(os.Stderr, "environment-update: %v\n", r.environmentUpdate)
+				fmt.Fprintf(os.Stderr, "environment-update: %v\n", environmentUpdate)
 			}
-			for _, name := range r.environmentUpdate {
+			for _, name := range environmentUpdate {
 				value, ok := r.podEnviron[name]
 				if ok {
 					r.enterCommand.AppendArgs("--set-env", fmt.Sprintf("%s=%s", name, value))
@@ -610,17 +625,17 @@ func (r *RunnerT) fetchAndRun() error {
 		if r.worker != nil {
 			err = r.worker.InitializePod(uuidFilePath(), NewWaiter(r.runCommand))
 
-			if err == nil && r.alias != "" {
-				if r.aliases[r.alias].hostTimezone {
+			if err == nil && r.alias != nil {
+				if r.aliases[r.alias.name].hostTimezone {
 					err = r.worker.setTimezoneFromHost()
 				}
 
-				passwd := r.fragments.passwd(r.alias)
+				passwd := r.fragments.passwd(r.alias.name)
 				if err == nil && len(passwd) > 0 {
 					err = r.worker.appendPasswdEntries(passwd)
 				}
 
-				group := r.fragments.group(r.alias)
+				group := r.fragments.group(r.alias.name)
 				if err == nil && len(group) > 0 {
 					err = r.worker.appendGroupEntries(group)
 				}
