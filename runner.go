@@ -52,11 +52,12 @@ type argsT struct {
 }
 
 type aliasT struct {
-	name              string
-	image             string
-	exec              string
-	hostTimezone      bool
-	environmentUpdate []string
+	name                 string
+	image                string
+	exec                 string
+	hostTimezone         bool
+	environmentUpdate    []string
+	environmentBlacklist map[string]bool
 }
 
 type RunnerT struct {
@@ -166,6 +167,22 @@ func (r *RunnerT) environmentUpdate() []string {
 		return r.alias.environmentUpdate
 	} else {
 		return nil
+	}
+}
+
+func (r *RunnerT) environmentBlacklist() map[string]bool {
+	if r.alias != nil {
+		return r.alias.environmentBlacklist
+	} else {
+		return nil
+	}
+}
+
+func (r *RunnerT) environmentBlacklisted(name string) bool {
+	if r.alias != nil && r.alias.environmentBlacklist != nil {
+		return r.alias.environmentBlacklist[name]
+	} else {
+		return false
 	}
 }
 
@@ -280,25 +297,41 @@ func (r *RunnerT) registerAlias(w io.Writer, warn bool, key string, val *aliasT)
 }
 
 func (r *RunnerT) registerAliases(w io.Writer, warn bool) error {
+	strings2map := func(ss []string) map[string]bool {
+		m := make(map[string]bool)
+		for _, s := range ss {
+			m[s] = true
+		}
+		return m
+	}
 	var anyErr error
 	r.aliases = make(map[string]aliasT)
 	for imageKey, imageAlias := range r.config.Alias {
+		blacklist := strings2map(imageAlias.EnvironmentBlacklist)
+		for _, name := range imageAlias.EnvironmentUpdate {
+			if blacklist[name] {
+				return fmt.Errorf("alias %s cannot have environment-update and blacklist for %s", imageKey, name)
+			}
+		}
+
 		err := r.registerAlias(w, warn, imageKey, &aliasT{
-			name:              imageKey,
-			image:             imageAlias.Image,
-			hostTimezone:      imageAlias.HostTimezone,
-			environmentUpdate: imageAlias.EnvironmentUpdate,
+			name:                 imageKey,
+			image:                imageAlias.Image,
+			hostTimezone:         imageAlias.HostTimezone,
+			environmentUpdate:    imageAlias.EnvironmentUpdate,
+			environmentBlacklist: blacklist,
 		})
 		if err != nil && anyErr == nil {
 			anyErr = err
 		}
 		for _, exec := range imageAlias.Exec {
 			err = r.registerAlias(w, warn, filepath.Base(exec), &aliasT{
-				name:              imageKey,
-				image:             imageAlias.Image,
-				exec:              exec,
-				hostTimezone:      imageAlias.HostTimezone,
-				environmentUpdate: imageAlias.EnvironmentUpdate,
+				name:                 imageKey,
+				image:                imageAlias.Image,
+				exec:                 exec,
+				hostTimezone:         imageAlias.HostTimezone,
+				environmentUpdate:    imageAlias.EnvironmentUpdate,
+				environmentBlacklist: blacklist,
 			})
 			if err != nil && anyErr == nil {
 				anyErr = err
@@ -334,6 +367,14 @@ func (r *RunnerT) templateVariables(u *user.User) map[string]string {
 	return vars
 }
 
+func (r *RunnerT) printEnvironment(w io.Writer) {
+	PrintEnviron(w, r.podEnviron)
+
+	for _, setenv := range *r.args.options.setenvs {
+		fmt.Fprintf(w, "%s\n", setenv)
+	}
+}
+
 func (r *RunnerT) createEnvFile(path string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -341,16 +382,10 @@ func (r *RunnerT) createEnvFile(path string) error {
 	}
 	defer f.Close()
 
-	PrintEnvironment(f, r.podEnviron)
-	if *r.args.options.printEnv {
-		PrintEnvironment(os.Stderr, r.podEnviron)
-	}
+	PrintEnviron(f, r.podEnviron)
 
 	for _, setenv := range *r.args.options.setenvs {
 		fmt.Fprintf(f, "%s\n", setenv)
-		if *r.args.options.printEnv {
-			fmt.Fprintf(os.Stderr, "%s\n", setenv)
-		}
 	}
 	return nil
 }
@@ -395,7 +430,7 @@ func (r *RunnerT) resolveImage() error {
 		return fmt.Errorf("command cannot start with -")
 	}
 
-	r.podEnviron = r.fragments.getEnvironment(r.aliasName())
+	r.podEnviron = r.fragments.getEnvironment(r.aliasName(), r.environmentBlacklist())
 
 	return nil
 }
@@ -580,6 +615,9 @@ func (r *RunnerT) printFetchAndRun() {
 		r.fetchCommand.Print(os.Stderr)
 	}
 	if r.runCommand != nil {
+		if *r.args.options.printEnv {
+			r.printEnvironment(os.Stderr)
+		}
 		r.runCommand.Print(os.Stderr)
 	}
 }
@@ -619,6 +657,9 @@ func (r *RunnerT) fetchAndRun() error {
 	err = r.runCommand.Start()
 	if err == nil {
 		if *r.args.options.verbose {
+			if *r.args.options.printEnv {
+				r.printEnvironment(os.Stderr)
+			}
 			r.runCommand.Print(os.Stderr)
 		}
 

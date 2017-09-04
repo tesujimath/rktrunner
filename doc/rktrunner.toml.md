@@ -69,6 +69,8 @@ Note: `use-path` is only useful when using *stage1-fly*, and is a work-around fo
 
 `environment-update = ` *list-of-string* `# environment variable names to update in rkt enter`
 
+`environment-blacklist = ` *list-of-string* `# environment variable names to omit for this alias`
+
 `[alias.` *identifier* `.environment]`
 
 *name* `=` *value* `# environment variable override for this image`

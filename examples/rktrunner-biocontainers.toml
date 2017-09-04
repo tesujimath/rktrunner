@@ -91,6 +91,7 @@ passwd = ["{{.Uid}}:x:{{.Uid}}:{{.Uid}}::/home/{{.Username}}:/bin/bash"]
 group = ["{{.Uid}}:x:{{.Uid}}:"]
 host-timezone = true
 environment-update = ["DISPLAY"]
+environment-blacklist = ["http_proxy","https_proxy"]
 [alias.emacs_.environment]
 PATH = "{{.PATH}}"
 GOROOT = "{{.GOROOT}}"

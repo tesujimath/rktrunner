@@ -32,7 +32,7 @@ func die(format string, args ...interface{}) {
 func main() {
 	r, err := rktrunner.NewRunner("/etc/rktrunner.toml")
 	// for testing:
-	// r, err := rktrunner.NewRunner("/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner-experimental.toml")
+	// r, err := rktrunner.NewRunner("/home/guestsi/go/src/github.com/tesujimath/rktrunner/examples/rktrunner-biocontainers.toml")
 	if err != nil {
 		die("%v", err)
 	}

@@ -55,7 +55,7 @@ func BuildEnviron(environ map[string]string) []string {
 	return env
 }
 
-func PrintEnvironment(w io.Writer, environ map[string]string) {
+func PrintEnviron(w io.Writer, environ map[string]string) {
 	// get keys in order
 	keys := make([]string, 0, len(environ))
 	for key := range environ {

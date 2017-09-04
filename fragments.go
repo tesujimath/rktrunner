@@ -131,17 +131,21 @@ func GetFragments(c *configT, vars map[string]string, f *fragmentsT) error {
 	return nil
 }
 
-func (f *fragmentsT) getEnvironment(alias string) map[string]string {
+func (f *fragmentsT) getEnvironment(alias string, blacklist map[string]bool) map[string]string {
 	// merge general and image environment
 	mergedEnviron := make(map[string]string)
 	for key, val := range f.Environment {
-		mergedEnviron[key] = val
+		if !blacklist[key] {
+			mergedEnviron[key] = val
+		}
 	}
 	if alias != "" {
 		aliasFragments, ok := f.Alias[alias]
 		if ok {
 			for key, val := range aliasFragments.Environment {
-				mergedEnviron[key] = val
+				if !blacklist[key] {
+					mergedEnviron[key] = val
+				}
 			}
 		}
 	}

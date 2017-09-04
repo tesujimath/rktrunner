@@ -47,13 +47,14 @@ type VolumeT struct {
 }
 
 type ImageAliasT struct {
-	Image             string
-	Exec              []string
-	Environment       map[string]string
-	Passwd            []string
-	Group             []string
-	HostTimezone      bool     `toml:"host-timezone"`
-	EnvironmentUpdate []string `toml:"environment-update"`
+	Image                string
+	Exec                 []string
+	Environment          map[string]string
+	Passwd               []string
+	Group                []string
+	HostTimezone         bool     `toml:"host-timezone"`
+	EnvironmentUpdate    []string `toml:"environment-update"`
+	EnvironmentBlacklist []string `toml:"environment-blacklist"`
 }
 
 const OptionsTable = "options"
