@@ -654,7 +654,11 @@ func (r *RunnerT) fetchAndRun() error {
 		return err
 	}
 
-	err = r.runCommand.Start()
+	if r.worker != nil {
+		err = r.runCommand.StartDaemon()
+	} else {
+		err = r.runCommand.Start()
+	}
 	if err == nil {
 		if *r.args.options.verbose {
 			if *r.args.options.printEnv {

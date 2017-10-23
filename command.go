@@ -56,13 +56,15 @@ func (c *CommandT) Print(w io.Writer) {
 	}
 }
 
-func (c *CommandT) create() {
+func (c *CommandT) create(preserveStdio bool) {
 	c.cmd = exec.Command(c.argv[0], c.argv[1:]...)
 	c.cmd.Path = c.argv0
 	c.cmd.Env = c.envv
-	c.cmd.Stdin = os.Stdin
-	c.cmd.Stdout = os.Stdout
-	c.cmd.Stderr = os.Stderr
+	if preserveStdio {
+		c.cmd.Stdin = os.Stdin
+		c.cmd.Stdout = os.Stdout
+		c.cmd.Stderr = os.Stderr
+	}
 	c.cmd.ExtraFiles = c.extraFiles
 }
 
@@ -71,12 +73,17 @@ func (c *CommandT) PreserveFile(f *os.File) {
 }
 
 func (c *CommandT) Run() error {
-	c.create()
+	c.create(true)
 	return c.cmd.Run()
 }
 
 func (c *CommandT) Start() error {
-	c.create()
+	c.create(true)
+	return c.cmd.Start()
+}
+
+func (c *CommandT) StartDaemon() error {
+	c.create(false)
 	return c.cmd.Start()
 }
 
