@@ -30,12 +30,12 @@ mkdir -p %{packagehome}
 mv %{name}-%{version}/* %{packagehome}
 mv %{packagehome}/{LICENSE,README.md,examples} .
 tar xaf %SOURCE1 -C %{gopath}/src
-GOPATH=%{gopath} go get github.com/appc/spec/schema github.com/BurntSushi/toml github.com/droundy/goopt github.com/rjeczalik/notify
 
 %define debug_package %{nil}
 
 %build
 cd %{packagehome}
+GOPATH=%{gopath} dep ensure
 GOPATH=%{gopath} make %{?_smp_mflags}
 
 
